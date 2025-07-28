@@ -43,6 +43,8 @@ jobs:
 
       - name: Find latest ZFS version
         id: zfs-version
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Get the latest ZFS 2.3.x release
           ZFS_VERSION=$(gh release list \

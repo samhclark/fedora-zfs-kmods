@@ -1,12 +1,5 @@
-ARG FEDORA_VERSION=42
-
-# Maybe there's something to be done parsing the release notes to find the
-# max compatible kernel version
-# gh release view --repo openzfs/zfs | grep -E 'Linux.*compatible.*kernels' | sed 's/.*\([0-9]\+\.[0-9]\+\) kernels.*/\1/'
-ARG KERNEL_MAJOR_MINOR=6.14
-
-# fill in ZFS version from GitHub runner
-# gh release view --repo openzfs/zfs --json tagName -q '.tagName'
+ARG FEDORA_VERSION
+ARG KERNEL_MAJOR_MINOR
 ARG ZFS_VERSION
 
 #####
@@ -42,7 +35,7 @@ RUN dnf install -y fedora-repos-archive
 
 # Install ZFS build dependencies
 # Using https://openzfs.github.io/openzfs-docs/Developer%20Resources/Custom%20Packages.html
-RUN KERNEL_VERSION=$(cat /kernel-version.txt) && \
+RUN KERNEL_VERSION="$(cat /kernel-version.txt)" && \
     dnf install -y --setopt=install_weak_deps=False \
         autoconf automake gcc \
         kernel-$KERNEL_VERSION kernel-devel-$KERNEL_VERSION kernel-modules-$KERNEL_VERSION kernel-rpm-macros \
@@ -53,11 +46,11 @@ RUN KERNEL_VERSION=$(cat /kernel-version.txt) && \
 
 # Build ZFS
 WORKDIR /zfs
-RUN export KERNEL_VERSION=$(cat /kernel-version.txt) && \
+RUN export KERNEL_VERSION="$(cat /kernel-version.txt)" && \
     curl -L "https://github.com/openzfs/zfs/archive/refs/tags/${ZFS_VERSION}.tar.gz" | \
         tar xzf - -C . --strip-components 1
 
-RUN export KERNEL_VERSION=$(cat /kernel-version.txt) && \
+RUN export KERNEL_VERSION="$(cat /kernel-version.txt)" && \
     ./autogen.sh && \
     ./configure \
         -with-linux=/usr/src/kernels/$KERNEL_VERSION/ \

@@ -1,0 +1,144 @@
+name: Build ZFS Kmods
+
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  query-versions:
+    runs-on: ubuntu-latest
+    container: quay.io/fedora/fedora-coreos:stable
+    outputs:
+      kernel-version: ${{ steps.kernel-info.outputs.kernel-version }}
+      kernel-major-minor: ${{ steps.kernel-info.outputs.kernel-major-minor }}
+      fedora-version: ${{ steps.kernel-info.outputs.fedora-version }}
+      zfs-tag: ${{ steps.zfs-version.outputs.zfs-tag }}
+      zfs-version: ${{ steps.zfs-version.outputs.zfs-version }}
+
+    steps:
+      - name: Query kernel and OS version
+        id: kernel-info
+        run: |
+          # Get kernel version (similar to Stage 1 in Containerfile)
+          KERNEL_VERSION=$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')
+          
+          # Extract major.minor version for build args
+          KERNEL_MAJOR_MINOR=$(echo "$KERNEL_VERSION" | cut -d'.' -f1-2)
+          
+          # Get Fedora version
+          FEDORA_VERSION=$(grep '^VERSION_ID=' /etc/os-release | cut -d'=' -f2)
+          
+          echo "kernel-version=$KERNEL_VERSION" >> $GITHUB_OUTPUT
+          echo "kernel-major-minor=$KERNEL_MAJOR_MINOR" >> $GITHUB_OUTPUT
+          echo "fedora-version=$FEDORA_VERSION" >> $GITHUB_OUTPUT
+          echo "Found kernel version: $KERNEL_VERSION"
+          echo "Found Fedora version: $FEDORA_VERSION"
+
+      - name: Install GitHub CLI
+        run: |
+          dnf install -y gh
+
+      - name: Find latest ZFS version
+        id: zfs-version
+        run: |
+          # Get the latest ZFS 2.3.x release
+          ZFS_VERSION=$(gh release list \
+            --repo openzfs/zfs \
+            --json tagName \
+            -q '.[] | select(.tagName | startswith("zfs-2.3")) | .tagName' \
+            --limit 1)
+          
+          # Extract just the version part for tagging
+          ZFS_VERSION_CLEAN=${ZFS_VERSION#zfs-}
+          
+          echo "zfs-tag=$ZFS_VERSION" >> $GITHUB_OUTPUT
+          echo "zfs-version=$ZFS_VERSION_CLEAN" >> $GITHUB_OUTPUT
+          echo "Found ZFS version: $ZFS_VERSION"
+
+      - name: Check ZFS-kernel compatibility
+        run: |
+          ZFS_VERSION="${{ steps.zfs-version.outputs.zfs-tag }}"
+          KERNEL_MAJOR_MINOR="${{ steps.kernel-info.outputs.kernel-major-minor }}"
+          
+          # Define compatibility matrix for ZFS versions
+          declare -A compatibility_matrix=(
+            ["zfs-2.2.7"]="6.12"
+            ["zfs-2.3.0"]="6.12"
+            ["zfs-2.3.1"]="6.13"
+            ["zfs-2.3.2"]="6.14"
+            ["zfs-2.2.8"]="6.15"
+            ["zfs-2.3.3"]="6.15"
+          )
+          
+          # Check if we have compatibility info for this ZFS version
+          if [[ -z "${compatibility_matrix[$ZFS_VERSION]}" ]]; then
+            echo "ERROR: Unknown ZFS version $ZFS_VERSION"
+            echo "This version is not in the compatibility matrix."
+            echo "Please update the compatibility matrix in both the Justfile and workflow to include this version."
+            exit 1
+          fi
+          
+          MAX_KERNEL="${compatibility_matrix[$ZFS_VERSION]}"
+          
+          # Check if current kernel is compatible
+          if [[ $(echo "$KERNEL_MAJOR_MINOR $MAX_KERNEL" | tr ' ' '\n' | sort -V | tail -n1) != "$MAX_KERNEL" ]]; then
+            echo "ERROR: ZFS $ZFS_VERSION is only compatible with Linux kernels up to $MAX_KERNEL"
+            echo "Current kernel: $KERNEL_MAJOR_MINOR"
+            echo "Please wait for a newer ZFS release or use an older kernel"
+            exit 1
+          fi
+          
+          echo "✓ ZFS $ZFS_VERSION is compatible with kernel $KERNEL_MAJOR_MINOR (max: $MAX_KERNEL)"
+
+  build:
+    needs: query-versions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Build container image
+        id: build
+        uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2.13
+        with:
+          image: ${{ env.IMAGE_NAME }}
+          tags: |
+            zfs-${{ needs.query-versions.outputs.zfs-version }}_kernel-${{ needs.query-versions.outputs.kernel-version }}
+            latest
+          containerfiles: |
+            ./Containerfile
+          build-args: |
+            ZFS_VERSION=${{ needs.query-versions.outputs.zfs-tag }}
+            FEDORA_VERSION=${{ needs.query-versions.outputs.fedora-version }}
+            KERNEL_MAJOR_MINOR=${{ needs.query-versions.outputs.kernel-major-minor }}
+
+      - name: Log in to Container Registry
+        uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1.7
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push to registry
+        id: push
+        uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # v2.8
+        with:
+          image: ${{ steps.build.outputs.image }}
+          tags: ${{ steps.build.outputs.tags }}
+          registry: ${{ env.REGISTRY }}
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true

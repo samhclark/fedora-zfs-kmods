@@ -29,17 +29,14 @@ jobs:
       - name: Query kernel and OS version from container labels
         id: kernel-info
         run: |
-          # Pull the image to get labels (still much faster than running container)
-          podman pull quay.io/fedora/fedora-coreos:stable
-          
-          # Get kernel version from container labels
-          KERNEL_VERSION=$(podman inspect --format='{{index .Labels "ostree.linux"}}' quay.io/fedora/fedora-coreos:stable)
+          # Get kernel version from remote container labels (no pull required!)
+          KERNEL_VERSION=$(skopeo inspect docker://quay.io/fedora/fedora-coreos:stable | jq -r '.Labels."ostree.linux"')
           
           # Extract major.minor version for build args
           KERNEL_MAJOR_MINOR=$(echo "$KERNEL_VERSION" | cut -d'.' -f1-2)
           
           # Get Fedora version from container version label
-          FEDORA_VERSION=$(podman inspect --format='{{index .Labels "org.opencontainers.image.version"}}' quay.io/fedora/fedora-coreos:stable | cut -d'.' -f1)
+          FEDORA_VERSION=$(skopeo inspect docker://quay.io/fedora/fedora-coreos:stable | jq -r '.Labels."org.opencontainers.image.version" | split(".")[0]')
           
           echo "kernel-version=$KERNEL_VERSION" >> $GITHUB_OUTPUT
           echo "kernel-major-minor=$KERNEL_MAJOR_MINOR" >> $GITHUB_OUTPUT

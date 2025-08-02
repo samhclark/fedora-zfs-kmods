@@ -11,20 +11,19 @@ zfs-version:
         -q '.[] | select(.tagName | startswith("zfs-2.3")) | .tagName' \
         --limit 1
 
-# Get kernel version from Fedora CoreOS stable (optimized with labels)
+# Get kernel version from Fedora CoreOS stable (super fast with remote inspection)
 kernel-version:
-    podman inspect --format='{{"{{index .Labels \"ostree.linux\"}}"}}' quay.io/fedora/fedora-coreos:stable
+    skopeo inspect docker://quay.io/fedora/fedora-coreos:stable | jq -r '.Labels."ostree.linux"'
 
 # Get kernel major.minor version
 kernel-major-minor:
     #!/usr/bin/env bash
-    KERNEL_VERSION=$(podman inspect --format='{{"{{index .Labels \"ostree.linux\"}}"}}' quay.io/fedora/fedora-coreos:stable)
+    KERNEL_VERSION=$(skopeo inspect docker://quay.io/fedora/fedora-coreos:stable | jq -r '.Labels."ostree.linux"')
     echo "$KERNEL_VERSION" | cut -d'.' -f1-2
 
-# Get Fedora version from CoreOS (optimized with labels)
+# Get Fedora version from CoreOS (super fast with remote inspection)
 fedora-version:
-    #!/usr/bin/env bash
-    podman inspect --format='{{"{{index .Labels \"org.opencontainers.image.version\"}}"}}' quay.io/fedora/fedora-coreos:stable | cut -d'.' -f1
+    skopeo inspect docker://quay.io/fedora/fedora-coreos:stable | jq -r '.Labels."org.opencontainers.image.version" | split(".")[0]'
 
 # Check if ZFS version is compatible with kernel version
 check-compatibility:

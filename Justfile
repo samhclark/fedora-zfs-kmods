@@ -141,3 +141,11 @@ extract-rpms:
     podman rm $CONTAINER_ID
     echo "RPMs extracted to ./rpms/"
     find ./rpms -name "*.rpm" -type f
+
+# Trigger GitHub Actions workflow
+run-workflow:
+    gh workflow run build.yaml
+
+# Check status of GitHub Actions workflow runs
+workflow-status:
+    gh run list --workflow=build.yaml --limit=5

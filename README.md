@@ -63,6 +63,12 @@ just list-rpms
 
 # Extract RPMs to ./rpms/ directory
 just extract-rpms
+
+# Trigger GitHub Actions workflow
+just run-workflow
+
+# Check status of recent workflow runs
+just workflow-status
 ```
 
 ### Individual Version Queries
@@ -121,6 +127,8 @@ The workflow runs on manual trigger (`workflow_dispatch`):
 ```bash
 # Via GitHub UI: Actions → Build ZFS Kmods → Run workflow
 # Or via CLI:
+just run-workflow
+# Or directly:
 gh workflow run build.yaml
 ```
 

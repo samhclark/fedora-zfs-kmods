@@ -2,6 +2,10 @@
 
 Pre-built ZFS kernel modules for Fedora CoreOS, packaged as container images containing RPMs.
 
+**Note**: I got the bones of this from [ublue-os/akmods](https://github.com/ublue-os/akmods) and got it working locally. Then I lost the motivation to do all the CI/CD stuff since it's always a headache--lots of reading docs, copy-pasting from other workflows I've written, etc. So I had Claude write all of it using Claude Code. 
+
+That worked out pretty damn well, as far as I can tell. This was my first time doing any sort of agentic worflow. Idk if there are some conventions I'm not following, or if there's some disclosure I'm supposed to list somewhere, so this is my attempt at putting it upfront.
+ 
 ## Why This Exists
 
 The standard approach of using the [ZFS repository](https://openzfs.github.io/openzfs-docs/Getting%20Started/Fedora/index.html) with `rpm-ostree install -y zfs` doesn't work with bootable containers. The `rpm-ostree install` command gets confused because it tries to build against the *host* kernel instead of the kernel inside the container during the build process.

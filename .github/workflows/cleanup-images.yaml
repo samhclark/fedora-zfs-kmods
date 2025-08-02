@@ -1,0 +1,171 @@
+name: Cleanup Old Container Images
+
+on:
+  schedule:
+    # Run weekly on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (true/false)'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      
+      - name: Get package versions
+        id: versions
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🔍 Querying all package versions..."
+          
+          # Query all package versions
+          versions_json=$(gh api "/user/packages/container/fedora-zfs-kmods/versions" --paginate)
+          echo "📦 Total versions found: $(echo "$versions_json" | jq length)"
+          
+          # Calculate 90-day cutoff
+          cutoff_date=$(date -d "90 days ago" -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "📅 Cutoff date: $cutoff_date"
+          
+          # Identify versioned tags (zfs-*_kernel-*) and sort by creation date (newest first)
+          versioned_tags=$(echo "$versions_json" | jq -r '
+            .[] | select(.metadata.container.tags[]? | test("^zfs-.*_kernel-.*$")) |
+            {created_at: .created_at, tag: .metadata.container.tags[]}' |
+            jq -s 'sort_by(.created_at) | reverse | .[].tag' | head -n 3)
+          
+          echo "🛡️  Protected tags (3 most recent):"
+          echo "$versioned_tags"
+          
+          # Validate we found at least 3 versioned tags
+          versioned_count=$(echo "$versioned_tags" | grep -c . || echo "0")
+          if [[ "$versioned_count" -lt 3 ]]; then
+            echo "⚠️  Warning: Only $versioned_count versioned tags found (expected minimum 3)"
+            echo "This may indicate a new repository or issue with tag detection"
+          fi
+          
+          # Build protected digests list from retained images
+          echo "🔐 Building protected attestation digests..."
+          protected_digests=()
+          while IFS= read -r tag; do
+              if [[ -n "$tag" ]]; then
+                  digest=$(echo "$versions_json" | jq -r --arg tag "$tag" '.[] | select(.metadata.container.tags[]? == $tag) | .name')
+                  if [[ -n "$digest" && "$digest" != "null" ]]; then
+                      attestation_tag="sha256-${digest#sha256:}"
+                      protected_digests+=("$attestation_tag")
+                      echo "  $tag -> $attestation_tag"
+                  fi
+              fi
+          done <<< "$versioned_tags"
+          
+          # Create regex pattern for protected tags
+          protected_pattern=$(echo "$versioned_tags" | tr '\n' '|' | sed 's/|$//')
+          
+          # Identify deletion candidates
+          echo "🗑️  Identifying deletion candidates..."
+          delete_ids=$(echo "$versions_json" | jq -r --arg cutoff "$cutoff_date" --argjson protected "$(printf '%s\n' "${protected_digests[@]}" | jq -R . | jq -s .)" --arg protected_tags "$protected_pattern" '
+            [.[] | select(
+              (.created_at < $cutoff) and
+              ((.metadata.container.tags[]? | test($protected_tags)) | not) and
+              ((.metadata.container.tags[]? | IN($protected[])) | not)
+            ) | .id] | join(",")')
+          
+          # Safety check: ensure at least 3 versioned tags will remain
+          remaining_versioned=$(echo "$versions_json" | jq --arg protected_tags "$protected_pattern" '[.[] | select(.metadata.container.tags[]? | test($protected_tags))] | length')
+          
+          echo "🔍 Safety validation:"
+          echo "  - Versioned tags that will remain: $remaining_versioned"
+          echo "  - Protected attestations: ${#protected_digests[@]}"
+          
+          if [[ "$remaining_versioned" -lt 3 ]]; then
+            echo "❌ SAFETY CHECK FAILED: Only $remaining_versioned versioned tags would remain (minimum 3 required)"
+            echo "📋 Current versioned tags that would be protected:"
+            echo "$versioned_tags"
+            echo ""
+            echo "🚨 Aborting cleanup to prevent violation of minimum version policy"
+            echo "This could indicate:"
+            echo "  - Repository has fewer than 3 versioned containers"
+            echo "  - Tag pattern matching issue"
+            echo "  - Date/retention logic error"
+            exit 1
+          fi
+          
+          echo "✅ Safety check passed: $remaining_versioned versioned tags will be retained"
+          
+          # Set outputs
+          if [[ -n "$delete_ids" && "$delete_ids" != "" ]]; then
+            candidate_count=$(echo "$delete_ids" | tr ',' '\n' | wc -l)
+            echo "📊 Found $candidate_count deletion candidates"
+            echo "delete_versions=$delete_ids" >> $GITHUB_OUTPUT
+            
+            # Log what would be deleted for dry-run visibility
+            if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+              echo "🧪 DRY RUN - Would delete the following versions:"
+              echo "$versions_json" | jq -r --arg ids "$delete_ids" '
+                .[] | select(.id | tostring | IN($ids | split(","))) |
+                "\(.metadata.container.tags[]? // "<untagged>") - \(.created_at) - ID: \(.id)"' | sort
+              echo ""
+              echo "📋 Deletion summary:"
+              echo "  - Total versions to delete: $candidate_count"
+              echo "  - Versions that will remain: $(($(echo "$versions_json" | jq length) - candidate_count))"
+            else
+              echo "🗑️  Proceeding with deletion of $candidate_count versions"
+            fi
+          else
+            echo "✅ No versions eligible for deletion"
+            echo "delete_versions=" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Delete old package versions
+        uses: actions/delete-package-versions@v5
+        if: steps.versions.outputs.delete_versions != '' && inputs.dry_run != 'true'
+        with:
+          package-name: 'fedora-zfs-kmods'
+          package-type: 'container'
+          package-version-ids: ${{ steps.versions.outputs.delete_versions }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Dry run summary
+        if: inputs.dry_run == 'true'
+        run: |
+          echo "🧪 DRY RUN COMPLETE"
+          echo "This was a dry run - no versions were actually deleted."
+          echo ""
+          if [[ -n "${{ steps.versions.outputs.delete_versions }}" ]]; then
+            echo "📋 Deletion candidates found:"
+            echo "${{ steps.versions.outputs.delete_versions }}" | tr ',' '\n' | nl -w2 -s'. ID: '
+            echo ""
+            echo "To perform actual cleanup, run this workflow with dry_run=false"
+          else
+            echo "✅ No versions were eligible for deletion"
+            echo "All versions are either:"
+            echo "  - Within the 90-day retention window"
+            echo "  - One of the 3 most recent versioned tags"  
+            echo "  - Attestations for protected images"
+          fi
+          echo ""
+          echo "🔒 Safety mechanisms active:"
+          echo "  - Minimum 3 versioned tags protected"
+          echo "  - Attestations preserved for all retained images"
+          echo "  - 90-day retention window enforced"
+      
+      - name: Cleanup completion summary
+        if: inputs.dry_run != 'true' && steps.versions.outputs.delete_versions != ''
+        run: |
+          echo "✅ CLEANUP COMPLETED"
+          echo "Successfully deleted older container versions while preserving:"
+          echo "  - 3 most recent versioned tags"
+          echo "  - All corresponding attestations"
+          echo "  - All versions within 90-day window"

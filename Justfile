@@ -214,3 +214,87 @@ run-workflow:
 # Check status of GitHub Actions workflow runs
 workflow-status:
     gh run list --workflow=build.yaml --limit=5
+
+# Test cleanup logic locally with configurable parameters
+cleanup-dry-run RETENTION_DAYS MIN_VERSIONS:
+    #!/usr/bin/env bash
+    echo "🧪 Testing cleanup logic (DRY RUN)"
+    echo "📅 Retention period: {{RETENTION_DAYS}} days"
+    echo "🔒 Minimum versions to keep: {{MIN_VERSIONS}}"
+    echo ""
+    
+    # Calculate cutoff date
+    cutoff_date=$(date -d "{{RETENTION_DAYS}} days ago" -u +"%Y-%m-%dT%H:%M:%SZ")
+    echo "📅 Cutoff date: $cutoff_date"
+    echo ""
+    
+    # Query all package versions
+    echo "🔍 Querying all package versions..."
+    versions_json=$(gh api "/user/packages/container/fedora-zfs-kmods/versions" --paginate)
+    
+    # Parse and categorize versions
+    echo "📦 Found versions:"
+    echo "$versions_json" | jq -r '.[] | "\(.metadata.container.tags[]? // "<untagged>") - \(.created_at) - ID: \(.id)"' | sort
+    echo ""
+    
+    # Identify versioned tags (zfs-*_kernel-*) and sort by creation date (newest first)
+    versioned_tags=$(echo "$versions_json" | jq -r '
+      .[] | select(.metadata.container.tags[]? | test("^zfs-.*_kernel-.*$")) |
+      {created_at: .created_at, tag: .metadata.container.tags[]}' |
+      jq -s 'sort_by(.created_at) | reverse | .[].tag' | head -n {{MIN_VERSIONS}})
+    
+    echo "🛡️  Protected tags ({{MIN_VERSIONS}} most recent):"
+    echo "$versioned_tags"
+    
+    # Validate we found expected number of versioned tags
+    versioned_count=$(echo "$versioned_tags" | grep -c . || echo "0")
+    if [[ "$versioned_count" -lt {{MIN_VERSIONS}} ]]; then
+      echo "⚠️  Warning: Only $versioned_count versioned tags found (expected minimum {{MIN_VERSIONS}})"
+      echo "This may indicate a new repository or issue with tag detection"
+    fi
+    echo ""
+    
+    # Build protected digests list from retained images
+    echo "🔐 Building protected attestation digests..."
+    protected_digests=()
+    while IFS= read -r tag; do
+        if [[ -n "$tag" ]]; then
+            digest=$(echo "$versions_json" | jq -r --arg tag "$tag" '.[] | select(.metadata.container.tags[]? == $tag) | .name')
+            if [[ -n "$digest" && "$digest" != "null" ]]; then
+                attestation_tag="sha256-${digest#sha256:}"
+                protected_digests+=("$attestation_tag")
+                echo "  $tag -> $attestation_tag"
+            fi
+        fi
+    done <<< "$versioned_tags"
+    echo ""
+    
+    # Create regex pattern for protected tags
+    protected_pattern=$(echo "$versioned_tags" | tr '\n' '|' | sed 's/|$//')
+    
+    # Identify deletion candidates
+    echo "🗑️  Identifying deletion candidates..."
+    deletion_candidates=$(echo "$versions_json" | jq -r --arg cutoff "$cutoff_date" --argjson protected "$(printf '%s\n' "${protected_digests[@]}" | jq -R . | jq -s .)" --arg protected_tags "$protected_pattern" '
+        .[] | select(
+            (.created_at < $cutoff) and
+            ((.metadata.container.tags[]? | test($protected_tags)) | not) and
+            ((.metadata.container.tags[]? | IN($protected[])) | not)
+        ) | "\(.metadata.container.tags[]? // "<untagged>") - \(.created_at) - ID: \(.id)"'
+    )
+    
+    if [[ -n "$deletion_candidates" ]]; then
+        echo "$deletion_candidates" | sort
+        echo ""
+        echo "📊 Summary:"
+        echo "  - Deletion candidates: $(echo "$deletion_candidates" | wc -l)"
+    else
+        echo "  No versions would be deleted"
+        echo ""
+        echo "📊 Summary:"
+        echo "  - Deletion candidates: 0"
+    fi
+    
+    total_versions=$(echo "$versions_json" | jq length)
+    echo "  - Total versions: $total_versions"
+    echo "  - Protected versions: {{MIN_VERSIONS}}"
+    echo "  - Protected attestations: ${#protected_digests[@]}"

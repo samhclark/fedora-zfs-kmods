@@ -34,10 +34,9 @@ Both Justfile and workflow maintain identical compatibility matrices mapping ZFS
 
 ## Container Output
 
-Published to GitHub Container Registry with dual tagging:
+Published to GitHub Container Registry:
 ```
 ghcr.io/samhclark/fedora-zfs-kmods:zfs-{version}_kernel-{full-kernel-version}
-ghcr.io/samhclark/fedora-zfs-kmods:latest
 ```
 
 RPMs organized in final image:
@@ -123,17 +122,33 @@ This replaces ~40 lines of ZFS build-from-source with 3 lines of RPM installatio
 - Compatibility matrix must be updated for each new ZFS release
 - Build fails safe when encountering unknown versions
 
+## Container Attestations
+
+GitHub Actions automatically generates and publishes build attestations alongside container images. These attestations are critical for security verification and cannot be deleted independently from their parent containers.
+
+**Attestation Storage Pattern:**
+- Main container: `ghcr.io/samhclark/fedora-zfs-kmods:zfs-2.3.3_kernel-6.15.4-200.fc42.x86_64`
+- Container digest: `sha256:842bc9e9f77bb39ae52becb8b0231f1ef99b580b81f7a6bd051a5f6eb72ed7c8`
+- Attestation tag: `ghcr.io/samhclark/fedora-zfs-kmods:sha256-842bc9e9f77bb39ae52becb8b0231f1ef99b580b81f7a6bd051a5f6eb72ed7c8`
+
+**Key Points:**
+- Attestation tags use format `sha256-{digest}` (colon replaced with dash)
+- Each container image has corresponding attestation stored as separate image
+- Attestations must be preserved when their parent containers are retained
+- Deleting attestations breaks container verification and security policies
+- GitHub's `actions/attest-build-provenance` automatically creates these during CI builds
+
 ## Current Status (as of recent updates)
 
 ✅ **Fully operational:**
 - Multi-stage container build with organized RPM output
 - GitHub Actions workflow with version discovery and compatibility checking
-- Dual container tagging (specific version + latest)
+- Container registry publishing with attestations
 - Complete bootc integration documentation and examples
 - Local development workflow with Justfile commands
-- Container registry publishing with attestations
+- Version-specific container tagging (removed `:latest` tag)
 
 📋 **Next planned enhancements:**
 - Automated/scheduled builds with duplicate detection
-- Container image cleanup workflows
+- Container image cleanup workflows with attestation preservation
 - Additional local testing commands

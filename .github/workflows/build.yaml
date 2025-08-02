@@ -187,7 +187,6 @@ jobs:
           image: ${{ env.IMAGE_NAME }}
           tags: |
             zfs-${{ needs.query-versions.outputs.zfs-version }}_kernel-${{ needs.query-versions.outputs.kernel-version }}
-            latest
           containerfiles: |
             ./Containerfile
           build-args: |

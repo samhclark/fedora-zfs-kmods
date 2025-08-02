@@ -162,7 +162,6 @@ build:
         --build-arg KERNEL_MAJOR_MINOR="$KERNEL_MAJOR_MINOR" \
         --build-arg FEDORA_VERSION="$FEDORA_VERSION" \
         -t "fedora-zfs-kmods:zfs-${ZFS_VERSION#zfs-}_kernel-${KERNEL_VERSION}" \
-        -t "fedora-zfs-kmods:latest" \
         .
 
 # Quick build test (just verify it builds, don't keep the image)
@@ -192,8 +191,8 @@ list-rpms:
     #!/usr/bin/env bash
     # Since the final image is FROM scratch, we need to mount it and list files
     # Create a temporary container to inspect the contents
-    CONTAINER_ID=$(podman create fedora-zfs-kmods:latest)
-    echo "RPMs in fedora-zfs-kmods:latest:"
+    CONTAINER_ID=$(podman create "fedora-zfs-kmods:zfs-$(just zfs-version | sed 's/zfs-//')_kernel-$(just kernel-version)")
+    echo "RPMs in built container:"
     podman export $CONTAINER_ID | tar -tv | grep '\.rpm$' | awk '{print $6}'
     podman rm $CONTAINER_ID
 
@@ -202,7 +201,7 @@ extract-rpms:
     #!/usr/bin/env bash
     mkdir -p ./rpms
     # Since the final image is FROM scratch, we need to export and extract
-    CONTAINER_ID=$(podman create fedora-zfs-kmods:latest)
+    CONTAINER_ID=$(podman create "fedora-zfs-kmods:zfs-$(just zfs-version | sed 's/zfs-//')_kernel-$(just kernel-version)")
     podman export $CONTAINER_ID | tar -x -C ./rpms/
     podman rm $CONTAINER_ID
     echo "RPMs extracted to ./rpms/"

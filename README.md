@@ -19,16 +19,15 @@ This project builds ZFS kernel modules from source and packages them as containe
 
 ## Container Images
 
-Images are tagged with both ZFS and kernel versions:
+Images are tagged with ZFS and kernel versions:
 
 ```
 ghcr.io/samhclark/fedora-zfs-kmods:zfs-{zfs-version}_kernel-{kernel-version}
-ghcr.io/samhclark/fedora-zfs-kmods:latest
 ```
 
 Example:
 ```
-ghcr.io/samhclark/fedora-zfs-kmods:zfs-2.3.3_kernel-6.15.7-200.fc42.x86_64
+ghcr.io/samhclark/fedora-zfs-kmods:zfs-2.3.3_kernel-6.15.4-200.fc42.x86_64
 ```
 
 Where:
@@ -208,7 +207,7 @@ ARG KERNEL_MAJOR_MINOR
 # Stage 2: Pull pre-built ZFS RPMs  
 # IMPORTANT: Must match exact ZFS and kernel versions
 ARG ZFS_VERSION=2.3.3
-ARG KERNEL_VERSION=6.15.7-200.fc42.x86_64
+ARG KERNEL_VERSION=6.15.4-200.fc42.x86_64
 FROM ghcr.io/samhclark/fedora-zfs-kmods:zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION} as zfs-rpms
 
 # Stage 3: Install RPMs in CoreOS image
@@ -225,7 +224,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
 
 ### Version Management Considerations
 
-**Critical:** Container tags must exactly match your target kernel and ZFS versions. You cannot use `:latest` in production bootc builds.
+**Critical:** Container tags must exactly match your target kernel and ZFS versions.
 
 **External build arguments:** Since Containerfile ARG values cannot be determined programmatically during build, ZFS and kernel versions must be provided externally (similar to this project's `.github/workflows/build.yaml` approach).
 

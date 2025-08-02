@@ -79,9 +79,37 @@ All required (no defaults):
 
 This repository supports a larger custom-coreos bootc image for NAS usage. The parent project previously built ZFS from source inline, causing long build times. Now it consumes pre-built RPMs from these containers, allowing faster daily OS builds while maintaining kernel module compatibility.
 
+### Bootc Integration Pattern
+The integration uses container bind mounts to access pre-built RPMs:
+```dockerfile
+FROM ghcr.io/samhclark/fedora-zfs-kmods:zfs-{version}_kernel-{version} as zfs-rpms
+RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
+    rpm-ostree install -y \
+        /zfs-rpms/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm \
+        /zfs-rpms/*.noarch.rpm \
+        /zfs-rpms/other/zfs-dracut-*.noarch.rpm
+```
+
+This replaces ~40 lines of ZFS build-from-source with 3 lines of RPM installation, saving ~10 minutes per build.
+
 ## Version Management Strategy
 
 - ZFS version selection pinned to 2.3.x series for stability (avoid .0 releases that could cause data loss)
 - Manual version progression prevents accidental NAS upgrades
 - Compatibility matrix must be updated for each new ZFS release
 - Build fails safe when encountering unknown versions
+
+## Current Status (as of recent updates)
+
+✅ **Fully operational:**
+- Multi-stage container build with organized RPM output
+- GitHub Actions workflow with version discovery and compatibility checking
+- Dual container tagging (specific version + latest)
+- Complete bootc integration documentation and examples
+- Local development workflow with Justfile commands
+- Container registry publishing with attestations
+
+📋 **Next planned enhancements:**
+- Automated/scheduled builds with duplicate detection
+- Container image cleanup workflows
+- Additional local testing commands

@@ -106,7 +106,7 @@ jobs:
       target-tag: ${{ steps.check.outputs.target-tag }}
     
     steps:
-      - name: Check if container already exists
+      - name: Check if container already exists with valid attestations
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
@@ -115,28 +115,54 @@ jobs:
           ZFS_VERSION="${{ needs.query-versions.outputs.zfs-version }}"
           KERNEL_VERSION="${{ needs.query-versions.outputs.kernel-version }}"
           TARGET_TAG="zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION}"
+          IMAGE="ghcr.io/samhclark/fedora-zfs-kmods:${TARGET_TAG}"
           FORCE_REBUILD="${{ inputs.force_rebuild }}"
           
           echo "🔍 Checking for existing container with tag: $TARGET_TAG"
           
-          # Check GitHub Container Registry API
+          # Step 1: Check container existence
           CONTAINER_EXISTS=$(gh api "/user/packages/container/fedora-zfs-kmods/versions" | \
             jq --arg tag "$TARGET_TAG" \
             '[.[] | .metadata.container.tags[]? | select(. == $tag)] | length > 0')
           
-          # Set job outputs (always reflect the true state)
-          echo "container-exists=${CONTAINER_EXISTS}" >> $GITHUB_OUTPUT
-          echo "target-tag=${TARGET_TAG}" >> $GITHUB_OUTPUT
-          
+          # Step 2: If container exists, verify attestations
           if [[ "$CONTAINER_EXISTS" == "true" ]]; then
-            echo "✅ Container already exists: $TARGET_TAG"
-            if [[ "$FORCE_REBUILD" == "true" ]]; then
-              echo "🔄 Force rebuild requested - build will proceed anyway"
+            echo "✅ Container exists: $TARGET_TAG"
+            echo "🔐 Checking attestations..."
+            
+            DIGEST=$(skopeo inspect docker://${IMAGE} | jq -r '.Digest')
+            IMAGE_WITH_DIGEST="${IMAGE}@${DIGEST}"
+            echo "📋 Verifying attestations for: ${IMAGE_WITH_DIGEST}"
+            
+            if gh attestation verify --repo samhclark/fedora-zfs-kmods "oci://${IMAGE_WITH_DIGEST}"; then
+              echo "✅ Valid attestations found"
+              ATTESTATIONS_VALID="true"
             else
-              echo "🚀 Build will be skipped - no new versions to build"
+              echo "❌ Invalid or missing attestations"
+              ATTESTATIONS_VALID="false"
+              # Override container-exists to force rebuild
+              echo "container-exists=false" >> $GITHUB_OUTPUT
+              echo "target-tag=${TARGET_TAG}" >> $GITHUB_OUTPUT
             fi
           else
             echo "🔨 Container does not exist: $TARGET_TAG"
+            ATTESTATIONS_VALID="false"
+          fi
+          
+          # Set job outputs (reflect true state unless attestations are invalid)
+          if [[ "$CONTAINER_EXISTS" == "true" && "$ATTESTATIONS_VALID" == "true" ]]; then
+            echo "container-exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "container-exists=false" >> $GITHUB_OUTPUT
+          fi
+          echo "target-tag=${TARGET_TAG}" >> $GITHUB_OUTPUT
+          
+          # Step 3: Final logging with force rebuild consideration
+          if [[ "$FORCE_REBUILD" == "true" ]]; then
+            echo "🔄 Force rebuild requested - build will proceed anyway"
+          elif [[ "$CONTAINER_EXISTS" == "true" && "$ATTESTATIONS_VALID" == "true" ]]; then
+            echo "🚀 Build will be skipped - valid container already exists"
+          else
             echo "🔨 Build will proceed"
           fi
 

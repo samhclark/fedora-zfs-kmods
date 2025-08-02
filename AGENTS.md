@@ -28,7 +28,8 @@ Both Justfile and workflow maintain identical compatibility matrices mapping ZFS
 
 - `Containerfile`: Multi-stage build definition (no defaults, all args required)
 - `Justfile`: Local development commands with version discovery and compatibility checking
-- `.github/workflows/build.yaml`: CI/CD pipeline with manual trigger
+- `.github/workflows/build.yaml`: CI/CD pipeline with scheduled and manual triggers
+- `.github/workflows/cleanup-images.yaml`: Weekly container image cleanup with attestation preservation
 - `README.md`: Comprehensive documentation for users and maintainers
 - `TODO.md`: Next session tasks and project backlog
 
@@ -142,13 +143,13 @@ GitHub Actions automatically generates and publishes build attestations alongsid
 
 ✅ **Fully operational:**
 - Multi-stage container build with organized RPM output
-- GitHub Actions workflow with version discovery and compatibility checking
+- GitHub Actions workflows with version discovery and compatibility checking
+- Automated/scheduled builds with duplicate detection and attestation verification
+- Container image cleanup workflows with attestation preservation
 - Container registry publishing with attestations
 - Complete bootc integration documentation and examples
 - Local development workflow with Justfile commands
 - Version-specific container tagging (removed `:latest` tag)
 
-📋 **Next planned enhancements:**
-- Automated/scheduled builds with duplicate detection
-- Container image cleanup workflows with attestation preservation
-- Additional local testing commands
+📋 **Project Status:**
+This project is **COMPLETE** and ready for production use. All core functionality has been implemented and tested. See TODO.md for optional future enhancements.

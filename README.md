@@ -68,6 +68,10 @@ just run-workflow
 
 # Check status of recent workflow runs
 just workflow-status
+
+# Test cleanup logic locally (configurable retention/versions)
+just cleanup-dry-run 7 2    # Test with 7 days retention, keep 2 versions
+just cleanup-dry-run 90 3   # Test with production settings
 ```
 
 ### Individual Version Queries
@@ -119,17 +123,29 @@ To upgrade from ZFS 2.3.x to 2.4.x (when available):
 
 ## GitHub Actions Workflow
 
-### Triggering Builds
+### Build Triggers
 
-The workflow runs on manual trigger (`workflow_dispatch`):
+The build workflow runs:
+- **Daily at 6 AM UTC** (automated builds)
+- **Manual trigger** via `workflow_dispatch`
+
+Automated builds include duplicate detection - they check if a container already exists for the current ZFS/kernel combination and skip building if found (unless forced).
 
 ```bash
-# Via GitHub UI: Actions → Build ZFS Kmods → Run workflow
+# Manual build via GitHub UI: Actions → Build ZFS Kmods → Run workflow
 # Or via CLI:
 just run-workflow
 # Or directly:
 gh workflow run build.yaml
 ```
+
+### Container Cleanup
+
+A separate cleanup workflow runs **weekly on Sundays at 2 AM UTC** to remove old container images:
+- Retains images from the last 90 days
+- Always preserves the 3 most recent versioned containers
+- Preserves attestations for all retained images
+- Includes dry-run mode for safety (default for manual runs)
 
 ### Workflow Process
 

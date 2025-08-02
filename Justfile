@@ -11,22 +11,20 @@ zfs-version:
         -q '.[] | select(.tagName | startswith("zfs-2.3")) | .tagName' \
         --limit 1
 
-# Get kernel version from Fedora CoreOS stable
+# Get kernel version from Fedora CoreOS stable (optimized with labels)
 kernel-version:
-    podman run --rm --pull=always quay.io/fedora/fedora-coreos:stable \
-        rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}'
+    podman inspect --format='{{"{{index .Labels \"ostree.linux\"}}"}}' quay.io/fedora/fedora-coreos:stable
 
 # Get kernel major.minor version
 kernel-major-minor:
     #!/usr/bin/env bash
-    KERNEL_VERSION=$(podman run --rm --pull=always quay.io/fedora/fedora-coreos:stable \
-        rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')
+    KERNEL_VERSION=$(podman inspect --format='{{"{{index .Labels \"ostree.linux\"}}"}}' quay.io/fedora/fedora-coreos:stable)
     echo "$KERNEL_VERSION" | cut -d'.' -f1-2
 
-# Get Fedora version from CoreOS
+# Get Fedora version from CoreOS (optimized with labels)
 fedora-version:
-    podman run --rm --pull=always quay.io/fedora/fedora-coreos:stable \
-        grep '^VERSION_ID=' /etc/os-release | cut -d'=' -f2
+    #!/usr/bin/env bash
+    podman inspect --format='{{"{{index .Labels \"org.opencontainers.image.version\"}}"}}' quay.io/fedora/fedora-coreos:stable | cut -d'.' -f1
 
 # Check if ZFS version is compatible with kernel version
 check-compatibility:

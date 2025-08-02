@@ -118,9 +118,9 @@ jobs:
           echo "🔍 Checking for existing container with tag: $TARGET_TAG"
           
           # Check GitHub Container Registry API
-          CONTAINER_EXISTS=$(gh api "/user/packages/container/fedora-zfs-kmods/versions" \
-            --jq --arg tag "$TARGET_TAG" \
-            'any(.[] | .metadata.container.tags[]?; . == $tag)')
+          CONTAINER_EXISTS=$(gh api "/user/packages/container/fedora-zfs-kmods/versions" | \
+            jq --arg tag "$TARGET_TAG" \
+            '[.[] | .metadata.container.tags[]? | select(. == $tag)] | length > 0')
           
           # Set job outputs
           echo "container-exists=${CONTAINER_EXISTS}" >> $GITHUB_OUTPUT

@@ -53,6 +53,7 @@ RPMs organized in final image:
 # Version discovery and compatibility
 just versions                    # Show all versions and check compatibility
 just check-compatibility         # Verify ZFS/kernel compatibility
+just check-container-exists      # Check if container already exists for current versions
 just zfs-version                 # Latest ZFS 2.3.x release
 just kernel-version              # Current CoreOS kernel version
 
@@ -66,7 +67,30 @@ just extract-rpms                # Extract RPMs to ./rpms/ directory
 
 # GitHub integration
 gh workflow run build.yaml       # Trigger CI build (manual)
+just workflow-status             # Check workflow run status
 ```
+
+## Development Patterns
+
+### Local CI/CD Development
+**Pattern**: Implement CI/CD logic in Justfile commands first, then port to GitHub workflows.
+
+**Benefits**:
+- Fast iteration without triggering expensive Actions runs
+- Local testing and debugging of complex shell/API logic
+- Immediate feedback on command syntax and API responses
+
+**Example**: The container existence check was developed as `just check-container-exists`:
+```bash
+# Developed and tested locally first
+just check-container-exists
+# 🔍 Checking for existing container with tag: zfs-2.3.3_kernel-6.15.4-200.fc42.x86_64
+# ✅ Container already exists: zfs-2.3.3_kernel-6.15.4-200.fc42.x86_64
+
+# Then ported to .github/workflows/build.yaml with identical logic
+```
+
+This approach saved significant development time by avoiding the GitHub Actions feedback loop during the jq syntax debugging phase.
 
 ## Build Arguments
 

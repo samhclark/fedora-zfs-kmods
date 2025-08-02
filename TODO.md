@@ -5,7 +5,7 @@
 ### 1. Add GitHub Workflow Trigger Command ✅ COMPLETED
 - [x] Add a `just run-workflow` command that triggers the GitHub Actions workflow
 - [x] Should use `gh workflow run build.yaml` 
-- [ ] Consider adding workflow status checking command as well
+- [x] Consider adding workflow status checking command as well (`just workflow-status`)
 - [x] Update README with the new command
 
 ### 2. Analyze Custom CoreOS Integration ✅ COMPLETED
@@ -30,13 +30,15 @@
 
 ## Future Improvements (Backlog)
 
-### Workflow Enhancements
-- [ ] Add automated/scheduled builds with caching system:
-  - [ ] Nightly scheduled workflow (e.g., `schedule: cron: '0 6 * * *'`)
-  - [ ] Check if build already exists for current ZFS+kernel combo
-  - [ ] Exit early if container already published for this version
-  - [ ] Only build if new ZFS version or kernel version detected
-  - [ ] Use GitHub Container Registry API or labels to check existing images
+### Workflow Enhancements ✅ MOSTLY COMPLETED
+- [x] Add automated/scheduled builds with caching system:
+  - [x] Nightly scheduled workflow (`schedule: cron: '0 6 * * *'`)
+  - [x] Check if build already exists for current ZFS+kernel combo
+  - [x] Exit early if container already published for this version
+  - [x] Only build if new ZFS version or kernel version detected
+  - [x] Use GitHub Container Registry API to check existing images
+  - [x] Enhanced with attestation verification for build integrity
+  - [x] Force rebuild option for manual overrides
 - [ ] Add workflow to clean up old container images
 - [ ] Consider matrix builds for multiple kernel versions if needed
 - [ ] Consider adding automated builds on CoreOS stable image updates

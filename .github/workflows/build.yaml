@@ -2,6 +2,12 @@ name: Build ZFS Kmods
 
 on:
   workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Force rebuild even if container exists'
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: '0 6 * * *'  # Daily at 6 AM UTC
 
@@ -114,6 +120,7 @@ jobs:
           ZFS_VERSION="${{ needs.query-versions.outputs.zfs-version }}"
           KERNEL_VERSION="${{ needs.query-versions.outputs.kernel-version }}"
           TARGET_TAG="zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION}"
+          FORCE_REBUILD="${{ inputs.force_rebuild }}"
           
           echo "🔍 Checking for existing container with tag: $TARGET_TAG"
           
@@ -122,13 +129,17 @@ jobs:
             jq --arg tag "$TARGET_TAG" \
             '[.[] | .metadata.container.tags[]? | select(. == $tag)] | length > 0')
           
-          # Set job outputs
+          # Set job outputs (always reflect the true state)
           echo "container-exists=${CONTAINER_EXISTS}" >> $GITHUB_OUTPUT
           echo "target-tag=${TARGET_TAG}" >> $GITHUB_OUTPUT
           
           if [[ "$CONTAINER_EXISTS" == "true" ]]; then
             echo "✅ Container already exists: $TARGET_TAG"
-            echo "🚀 Build will be skipped - no new versions to build"
+            if [[ "$FORCE_REBUILD" == "true" ]]; then
+              echo "🔄 Force rebuild requested - build will proceed anyway"
+            else
+              echo "🚀 Build will be skipped - no new versions to build"
+            fi
           else
             echo "🔨 Container does not exist: $TARGET_TAG"
             echo "🔨 Build will proceed"
@@ -136,7 +147,7 @@ jobs:
 
   build:
     needs: [query-versions, check-existing]
-    if: needs.query-versions.result == 'success' && needs.check-existing.outputs.container-exists != 'true'
+    if: needs.query-versions.result == 'success' && (needs.check-existing.outputs.container-exists != 'true' || inputs.force_rebuild)
     runs-on: ubuntu-latest
     permissions:
       contents: read

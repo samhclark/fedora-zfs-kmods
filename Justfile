@@ -237,21 +237,31 @@ cleanup-dry-run RETENTION_DAYS MIN_VERSIONS:
     echo "$versions_json" | jq -r '.[] | "\(.metadata.container.tags[]? // "<untagged>") - \(.created_at) - ID: \(.id)"' | sort
     echo ""
     
-    # Identify versioned tags (zfs-*_kernel-*) and sort by creation date (newest first)
-    versioned_tags=$(echo "$versions_json" | jq -r '
+    # Find ALL versioned tags (not limited yet)
+    all_versioned_tags=$(echo "$versions_json" | jq -r '
       .[] | select(.metadata.container.tags[]? | test("^zfs-.*_kernel-.*$")) |
-      {created_at: .created_at, tag: .metadata.container.tags[]}' |
-      jq -s 'sort_by(.created_at) | reverse | .[].tag' | head -n {{MIN_VERSIONS}})
+      {created_at: .created_at, tag: .metadata.container.tags[], id: .id}' |
+      jq -s 'sort_by(.created_at) | reverse')
     
-    echo "🛡️  Protected tags ({{MIN_VERSIONS}} most recent):"
-    echo "$versioned_tags"
+    # Count total versioned tags available
+    total_versioned_count=$(echo "$all_versioned_tags" | jq length)
+    echo "🏷️  Total versioned tags found: $total_versioned_count"
     
-    # Validate we found expected number of versioned tags
-    versioned_count=$(echo "$versioned_tags" | grep -c . || echo "0")
-    if [[ "$versioned_count" -lt {{MIN_VERSIONS}} ]]; then
-      echo "⚠️  Warning: Only $versioned_count versioned tags found (expected minimum {{MIN_VERSIONS}})"
-      echo "This may indicate a new repository or issue with tag detection"
+    # Early safety check - do we have enough versioned tags in the repository?
+    if [[ "$total_versioned_count" -lt {{MIN_VERSIONS}} ]]; then
+      echo "❌ EARLY SAFETY CHECK FAILED: Only $total_versioned_count versioned tags exist in repository (minimum {{MIN_VERSIONS}} required)"
+      echo "📋 Available versioned tags:"
+      echo "$all_versioned_tags" | jq -r '.[].tag'
+      echo ""
+      echo "🚨 Cannot proceed with cleanup - insufficient versioned tags to maintain minimum policy"
+      echo "This indicates the repository needs more tagged releases before cleanup can run safely"
+      exit 1
     fi
+    
+    # Select the most recent N versioned tags to protect
+    protected_versioned_tags=$(echo "$all_versioned_tags" | jq -r ".[0:{{MIN_VERSIONS}}] | .[].tag")
+    echo "🛡️  Protected tags ({{MIN_VERSIONS}} most recent):"
+    echo "$protected_versioned_tags"
     echo ""
     
     # Build protected digests list from retained images
@@ -266,11 +276,18 @@ cleanup-dry-run RETENTION_DAYS MIN_VERSIONS:
                 echo "  $tag -> $attestation_tag"
             fi
         fi
-    done <<< "$versioned_tags"
+    done <<< "$protected_versioned_tags"
     echo ""
     
     # Create regex pattern for protected tags
-    protected_pattern=$(echo "$versioned_tags" | tr '\n' '|' | sed 's/|$//')
+    protected_pattern=$(echo "$protected_versioned_tags" | tr '\n' '|' | sed 's/|$//')
+    
+    echo "🔍 Safety validation:"
+    echo "  - Total versioned tags in repository: $total_versioned_count"
+    echo "  - Versioned tags being protected: {{MIN_VERSIONS}}"
+    echo "  - Protected attestations: ${#protected_digests[@]}"
+    echo "✅ Safety check passed: $total_versioned_count versioned tags available, protecting {{MIN_VERSIONS}} most recent"
+    echo ""
     
     # Identify deletion candidates
     echo "🗑️  Identifying deletion candidates..."

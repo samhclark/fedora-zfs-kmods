@@ -29,7 +29,10 @@ jobs:
       - name: Query kernel and OS version from container labels
         id: kernel-info
         run: |
-          # Get kernel version from container labels (much faster than running container)
+          # Pull the image to get labels (still much faster than running container)
+          podman pull quay.io/fedora/fedora-coreos:stable
+          
+          # Get kernel version from container labels
           KERNEL_VERSION=$(podman inspect --format='{{index .Labels "ostree.linux"}}' quay.io/fedora/fedora-coreos:stable)
           
           # Extract major.minor version for build args

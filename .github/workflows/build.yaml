@@ -97,8 +97,46 @@ jobs:
           
           echo "✓ ZFS $ZFS_VERSION is compatible with kernel $KERNEL_MAJOR_MINOR (max: $MAX_KERNEL)"
 
-  build:
+  check-existing:
     needs: query-versions
+    runs-on: ubuntu-latest
+    outputs:
+      container-exists: ${{ steps.check.outputs.container-exists }}
+      target-tag: ${{ steps.check.outputs.target-tag }}
+    
+    steps:
+      - name: Check if container already exists
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Use versions from query-versions job
+          ZFS_VERSION="${{ needs.query-versions.outputs.zfs-version }}"
+          KERNEL_VERSION="${{ needs.query-versions.outputs.kernel-version }}"
+          TARGET_TAG="zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION}"
+          
+          echo "🔍 Checking for existing container with tag: $TARGET_TAG"
+          
+          # Check GitHub Container Registry API
+          CONTAINER_EXISTS=$(gh api "/user/packages/container/fedora-zfs-kmods/versions" \
+            --jq --arg tag "$TARGET_TAG" \
+            'any(.[] | .metadata.container.tags[]?; . == $tag)')
+          
+          # Set job outputs
+          echo "container-exists=${CONTAINER_EXISTS}" >> $GITHUB_OUTPUT
+          echo "target-tag=${TARGET_TAG}" >> $GITHUB_OUTPUT
+          
+          if [[ "$CONTAINER_EXISTS" == "true" ]]; then
+            echo "✅ Container already exists: $TARGET_TAG"
+            echo "🚀 Build will be skipped - no new versions to build"
+          else
+            echo "🔨 Container does not exist: $TARGET_TAG"
+            echo "🔨 Build will proceed"
+          fi
+
+  build:
+    needs: [query-versions, check-existing]
+    if: needs.query-versions.result == 'success' && needs.check-existing.outputs.container-exists != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read

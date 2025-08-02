@@ -191,10 +191,79 @@ Built RPMs are organized in the final image:
 
 ## Usage with Bootable Containers
 
-<!-- This section intentionally left blank -->
-<!-- Usage patterns for bootc environments to be documented -->
+This project builds ZFS kernel modules as container images containing organized RPM packages, designed for integration with bootc-based CoreOS builds.
+
+### Integration Approach
+
+Instead of building ZFS from source during your CoreOS build (which takes ~10 minutes), use pre-built RPMs from this container:
+
+```dockerfile
+# Replace ZFS build stages with this approach:
+
+# Stage 1: Verify CoreOS kernel version (keep existing verification)
+FROM quay.io/fedora/fedora-coreos:stable as kernel-query
+ARG KERNEL_MAJOR_MINOR
+# ... existing verification logic ...
+
+# Stage 2: Pull pre-built ZFS RPMs  
+# IMPORTANT: Must match exact ZFS and kernel versions
+ARG ZFS_VERSION=2.3.3
+ARG KERNEL_VERSION=6.15.7-200.fc42.x86_64
+FROM ghcr.io/samhclark/fedora-zfs-kmods:zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION} as zfs-rpms
+
+# Stage 3: Install RPMs in CoreOS image
+FROM quay.io/fedora/fedora-coreos:stable
+RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
+    rpm-ostree install -y \
+        /zfs-rpms/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm \
+        /zfs-rpms/*.noarch.rpm \
+        /zfs-rpms/other/zfs-dracut-*.noarch.rpm && \
+    depmod -a "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" && \
+    echo "zfs" > /etc/modules-load.d/zfs.conf && \
+    ostree container commit
+```
+
+### Version Management Considerations
+
+**Critical:** Container tags must exactly match your target kernel and ZFS versions. You cannot use `:latest` in production bootc builds.
+
+**External build arguments:** Since Containerfile ARG values cannot be determined programmatically during build, ZFS and kernel versions must be provided externally (similar to this project's `.github/workflows/build.yaml` approach).
+
+**Verification:** Stage 1 kernel verification should still be used to ensure the pulled RPM container matches your expected kernel version.
 
 ## Integration Examples
 
-<!-- This section intentionally left blank -->
-<!-- Examples of using these RPMs in bootc images to be documented -->
+### Custom CoreOS Replacement
+
+Replace the commented-out ZFS build in your custom CoreOS Containerfile:
+
+```dockerfile
+# OLD APPROACH (10+ minute builds):
+# FROM quay.io/fedora/fedora:${FEDORA_VERSION} as builder
+# ... 40+ lines of ZFS build from source ...
+
+# NEW APPROACH (cached RPMs):
+ARG ZFS_VERSION
+ARG KERNEL_VERSION  
+FROM ghcr.io/samhclark/fedora-zfs-kmods:zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION} as zfs-rpms
+
+FROM quay.io/fedora/fedora-coreos:stable
+RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
+    --mount=type=bind,from=kernel-query,source=/kernel-version.txt,target=/kernel-version.txt \
+    rpm-ostree install -y \
+        tailscale \
+        /zfs-rpms/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm \
+        /zfs-rpms/*.noarch.rpm \
+        /zfs-rpms/other/zfs-dracut-*.noarch.rpm && \
+    depmod -a "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" && \
+    echo "zfs" > /etc/modules-load.d/zfs.conf && \
+    systemctl enable tailscaled && \
+    ostree container commit
+```
+
+### Benefits
+
+- **Faster builds:** Eliminates ~10 minutes of ZFS compilation per build
+- **Cached compatibility:** RPMs only rebuild when kernel/ZFS versions change  
+- **Same functionality:** Identical ZFS installation in final image
+- **Reduced complexity:** No ZFS build dependencies in your Containerfile

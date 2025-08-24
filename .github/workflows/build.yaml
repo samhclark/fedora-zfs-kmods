@@ -52,9 +52,9 @@ jobs:
           # Get the latest ZFS 2.3.x release
           ZFS_VERSION=$(gh release list \
             --repo openzfs/zfs \
-            --json tagName \
-            -q '.[] | select(.tagName | startswith("zfs-2.3")) | .tagName' \
-            --limit 1)
+            --json publishedAt,tagName \
+            --jq '[.[] | select(.tagName | startswith("zfs-2.3"))] | sort_by(.publishedAt) | last | .tagName' \
+            --limit 100)
           
           # Extract just the version part for tagging
           ZFS_VERSION_CLEAN=${ZFS_VERSION#zfs-}

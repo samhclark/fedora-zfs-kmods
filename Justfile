@@ -40,6 +40,7 @@ check-compatibility:
         ["zfs-2.3.2"]="6.14"
         ["zfs-2.2.8"]="6.15"
         ["zfs-2.3.3"]="6.15"
+        ["zfs-2.3.4"]="6.16"
     )
     
     # Check if we have compatibility info for this ZFS version

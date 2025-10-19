@@ -25,102 +25,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       
-      - name: Get package versions
+      - name: Determine cleanup candidates
         id: versions
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "🔍 Querying all package versions..."
-          
-          # Query all package versions
-          versions_json=$(gh api "/user/packages/container/fedora-zfs-kmods/versions" --paginate)
-          echo "📦 Total versions found: $(echo "$versions_json" | jq length)"
-          
-          # Calculate 90-day cutoff
-          cutoff_date=$(date -d "90 days ago" -u +"%Y-%m-%dT%H:%M:%SZ")
-          echo "📅 Cutoff date: $cutoff_date"
-          
-          # Find ALL versioned tags (not limited yet)
-          all_versioned_tags=$(echo "$versions_json" | jq -r '
-            .[] | select(.metadata.container.tags[]? | test("^zfs-.*_kernel-.*$")) |
-            {created_at: .created_at, tag: .metadata.container.tags[], id: .id}' |
-            jq -s 'sort_by(.created_at) | reverse')
-          
-          # Count total versioned tags available
-          total_versioned_count=$(echo "$all_versioned_tags" | jq length)
-          echo "🏷️  Total versioned tags found: $total_versioned_count"
-          
-          # Early safety check - do we have enough versioned tags in the repository?
-          if [[ "$total_versioned_count" -lt 3 ]]; then
-            echo "❌ EARLY SAFETY CHECK FAILED: Only $total_versioned_count versioned tags exist in repository (minimum 3 required)"
-            echo "📋 Available versioned tags:"
-            echo "$all_versioned_tags" | jq -r '.[].tag'
-            echo ""
-            echo "🚨 Cannot proceed with cleanup - insufficient versioned tags to maintain minimum policy"
-            echo "This indicates the repository needs more tagged releases before cleanup can run safely"
-            exit 1
-          fi
-          
-          # Select the 3 most recent versioned tags to protect
-          protected_versioned_tags=$(echo "$all_versioned_tags" | jq -r '.[0:3] | .[].tag')
-          echo "🛡️  Protected tags (3 most recent):"
-          echo "$protected_versioned_tags"
-          
-          # Build protected digests list from retained images
-          echo "🔐 Building protected attestation digests..."
-          protected_digests=()
-          while IFS= read -r tag; do
-              if [[ -n "$tag" ]]; then
-                  digest=$(echo "$versions_json" | jq -r --arg tag "$tag" '.[] | select(.metadata.container.tags[]? == $tag) | .name')
-                  if [[ -n "$digest" && "$digest" != "null" ]]; then
-                      attestation_tag="sha256-${digest#sha256:}"
-                      protected_digests+=("$attestation_tag")
-                      echo "  $tag -> $attestation_tag"
-                  fi
-              fi
-          done <<< "$protected_versioned_tags"
-          
-          # Create regex pattern for protected tags
-          protected_pattern=$(echo "$protected_versioned_tags" | tr '\n' '|' | sed 's/|$//')
-          
-          # Identify deletion candidates
-          echo "🗑️  Identifying deletion candidates..."
-          delete_ids=$(echo "$versions_json" | jq -r --arg cutoff "$cutoff_date" --argjson protected "$(printf '%s\n' "${protected_digests[@]}" | jq -R . | jq -s .)" --arg protected_tags "$protected_pattern" '
-            [.[] | select(
-              (.created_at < $cutoff) and
-              ((.metadata.container.tags[]? | test($protected_tags)) | not) and
-              ((.metadata.container.tags[]? | IN($protected[])) | not)
-            ) | .id] | join(",")')
-          
-          echo "🔍 Safety validation:"
-          echo "  - Total versioned tags in repository: $total_versioned_count"
-          echo "  - Versioned tags being protected: 3"
-          echo "  - Protected attestations: ${#protected_digests[@]}"
-          echo "✅ Safety check passed: $total_versioned_count versioned tags available, protecting 3 most recent"
-          
-          # Set outputs
-          if [[ -n "$delete_ids" && "$delete_ids" != "" ]]; then
-            candidate_count=$(echo "$delete_ids" | tr ',' '\n' | wc -l)
-            echo "📊 Found $candidate_count deletion candidates"
-            echo "delete_versions=$delete_ids" >> $GITHUB_OUTPUT
-            
-            # Log what would be deleted for dry-run visibility
-            if [[ "${{ inputs.dry_run }}" == "true" ]]; then
-              echo "🧪 DRY RUN - Would delete the following versions:"
-              echo "$versions_json" | jq -r --arg ids "$delete_ids" '
-                .[] | select(.id | tostring | IN($ids | split(","))) |
-                "\(.metadata.container.tags[]? // "<untagged>") - \(.created_at) - ID: \(.id)"' | sort
-              echo ""
-              echo "📋 Deletion summary:"
-              echo "  - Total versions to delete: $candidate_count"
-              echo "  - Versions that will remain: $(($(echo "$versions_json" | jq length) - candidate_count))"
-            else
-              echo "🗑️  Proceeding with deletion of $candidate_count versions"
-            fi
-          else
-            echo "✅ No versions eligible for deletion"
-            echo "delete_versions=" >> $GITHUB_OUTPUT
-          fi
+          ./scripts/cleanup-container-images.sh \
+            --retention-days 90 \
+            --min-versions 3 \
+            --dry-run "${{ inputs.dry_run }}" \
+            --github-output "$GITHUB_OUTPUT"
       
       - name: Delete old package versions
         uses: actions/delete-package-versions@v5

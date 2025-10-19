@@ -26,22 +26,23 @@ jobs:
       zfs-version: ${{ steps.zfs-version.outputs.zfs-version }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
       - name: Query kernel and OS version from container labels
         id: kernel-info
         run: |
-          # Get kernel version from remote container labels (no pull required!)
-          KERNEL_VERSION=$(skopeo inspect docker://quay.io/fedora/fedora-coreos:stable | jq -r '.Labels."ostree.linux"')
-          
-          # Extract major.minor version for build args
-          KERNEL_MAJOR_MINOR=$(echo "$KERNEL_VERSION" | cut -d'.' -f1-2)
-          
-          # Get Fedora version from container version label
-          FEDORA_VERSION=$(skopeo inspect docker://quay.io/fedora/fedora-coreos:stable | jq -r '.Labels."org.opencontainers.image.version" | split(".")[0]')
-          
+          INFO_JSON=$(./scripts/query-kernel-info.sh)
+
+          KERNEL_VERSION=$(echo "$INFO_JSON" | jq -r '."kernel-version"')
+          KERNEL_MAJOR_MINOR=$(echo "$INFO_JSON" | jq -r '."kernel-major-minor"')
+          FEDORA_VERSION=$(echo "$INFO_JSON" | jq -r '."fedora-version"')
+
           echo "kernel-version=$KERNEL_VERSION" >> $GITHUB_OUTPUT
           echo "kernel-major-minor=$KERNEL_MAJOR_MINOR" >> $GITHUB_OUTPUT
           echo "fedora-version=$FEDORA_VERSION" >> $GITHUB_OUTPUT
           echo "Found kernel version: $KERNEL_VERSION"
+          echo "Found kernel major.minor: $KERNEL_MAJOR_MINOR"
           echo "Found Fedora version: $FEDORA_VERSION"
 
       - name: Find latest ZFS version
@@ -49,55 +50,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Get the latest ZFS 2.3.x release
-          ZFS_VERSION=$(gh release list \
-            --repo openzfs/zfs \
-            --json publishedAt,tagName \
-            --jq '[.[] | select(.tagName | startswith("zfs-2.3"))] | sort_by(.publishedAt) | last | .tagName' \
-            --limit 100)
-          
-          # Extract just the version part for tagging
-          ZFS_VERSION_CLEAN=${ZFS_VERSION#zfs-}
-          
-          echo "zfs-tag=$ZFS_VERSION" >> $GITHUB_OUTPUT
-          echo "zfs-version=$ZFS_VERSION_CLEAN" >> $GITHUB_OUTPUT
-          echo "Found ZFS version: $ZFS_VERSION"
+          INFO_JSON=$(./scripts/query-zfs-version.sh)
+
+          ZFS_TAG=$(echo "$INFO_JSON" | jq -r '."zfs-tag"')
+          ZFS_VERSION=$(echo "$INFO_JSON" | jq -r '."zfs-version"')
+
+          echo "zfs-tag=$ZFS_TAG" >> $GITHUB_OUTPUT
+          echo "zfs-version=$ZFS_VERSION" >> $GITHUB_OUTPUT
+          echo "Found ZFS version: $ZFS_TAG"
 
       - name: Check ZFS-kernel compatibility
         run: |
-          ZFS_VERSION="${{ steps.zfs-version.outputs.zfs-tag }}"
-          KERNEL_MAJOR_MINOR="${{ steps.kernel-info.outputs.kernel-major-minor }}"
-          
-          # Define compatibility matrix for ZFS versions
-          declare -A compatibility_matrix=(
-            ["zfs-2.2.7"]="6.12"
-            ["zfs-2.3.0"]="6.12"
-            ["zfs-2.3.1"]="6.13"
-            ["zfs-2.3.2"]="6.14"
-            ["zfs-2.2.8"]="6.15"
-            ["zfs-2.3.3"]="6.15"
-            ["zfs-2.3.4"]="6.16"
-          )
-          
-          # Check if we have compatibility info for this ZFS version
-          if [[ -z "${compatibility_matrix[$ZFS_VERSION]}" ]]; then
-            echo "ERROR: Unknown ZFS version $ZFS_VERSION"
-            echo "This version is not in the compatibility matrix."
-            echo "Please update the compatibility matrix in both the Justfile and workflow to include this version."
-            exit 1
-          fi
-          
-          MAX_KERNEL="${compatibility_matrix[$ZFS_VERSION]}"
-          
-          # Check if current kernel is compatible
-          if [[ $(echo "$KERNEL_MAJOR_MINOR $MAX_KERNEL" | tr ' ' '\n' | sort -V | tail -n1) != "$MAX_KERNEL" ]]; then
-            echo "ERROR: ZFS $ZFS_VERSION is only compatible with Linux kernels up to $MAX_KERNEL"
-            echo "Current kernel: $KERNEL_MAJOR_MINOR"
-            echo "Please wait for a newer ZFS release or use an older kernel"
-            exit 1
-          fi
-          
-          echo "✓ ZFS $ZFS_VERSION is compatible with kernel $KERNEL_MAJOR_MINOR (max: $MAX_KERNEL)"
+          ./scripts/check-compatibility.sh \
+            "${{ steps.zfs-version.outputs.zfs-tag }}" \
+            "${{ steps.kernel-info.outputs.kernel-major-minor }}"
 
   check-existing:
     needs: query-versions
@@ -112,56 +78,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Use versions from query-versions job
           ZFS_VERSION="${{ needs.query-versions.outputs.zfs-version }}"
           KERNEL_VERSION="${{ needs.query-versions.outputs.kernel-version }}"
           TARGET_TAG="zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION}"
-          IMAGE="ghcr.io/samhclark/fedora-zfs-kmods:${TARGET_TAG}"
           FORCE_REBUILD="${{ inputs.force_rebuild }}"
-          
-          echo "🔍 Checking for existing container with tag: $TARGET_TAG"
-          
-          # Step 1: Check container existence
-          CONTAINER_EXISTS=$(gh api "/user/packages/container/fedora-zfs-kmods/versions" | \
-            jq --arg tag "$TARGET_TAG" \
-            '[.[] | .metadata.container.tags[]? | select(. == $tag)] | length > 0')
-          
-          # Step 2: If container exists, verify attestations
-          if [[ "$CONTAINER_EXISTS" == "true" ]]; then
-            echo "✅ Container exists: $TARGET_TAG"
-            echo "🔐 Checking attestations..."
-            
-            DIGEST=$(skopeo inspect docker://${IMAGE} | jq -r '.Digest')
-            IMAGE_WITH_DIGEST="${IMAGE}@${DIGEST}"
-            echo "📋 Verifying attestations for: ${IMAGE_WITH_DIGEST}"
-            
-            if gh attestation verify --repo samhclark/fedora-zfs-kmods "oci://${IMAGE_WITH_DIGEST}"; then
-              echo "✅ Valid attestations found"
-              ATTESTATIONS_VALID="true"
-            else
-              echo "❌ Invalid or missing attestations"
-              ATTESTATIONS_VALID="false"
-              # Override container-exists to force rebuild
-              echo "container-exists=false" >> $GITHUB_OUTPUT
-              echo "target-tag=${TARGET_TAG}" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "🔨 Container does not exist: $TARGET_TAG"
-            ATTESTATIONS_VALID="false"
-          fi
-          
-          # Set job outputs (reflect true state unless attestations are invalid)
-          if [[ "$CONTAINER_EXISTS" == "true" && "$ATTESTATIONS_VALID" == "true" ]]; then
-            echo "container-exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "container-exists=false" >> $GITHUB_OUTPUT
-          fi
-          echo "target-tag=${TARGET_TAG}" >> $GITHUB_OUTPUT
-          
-          # Step 3: Final logging with force rebuild consideration
+
+          set +e
+          ./scripts/check-container.sh \
+            --zfs-version "$ZFS_VERSION" \
+            --kernel-version "$KERNEL_VERSION" \
+            --require-attestations true \
+            --github-output "$GITHUB_OUTPUT"
+          RESULT=$?
+          set -e
+
           if [[ "$FORCE_REBUILD" == "true" ]]; then
             echo "🔄 Force rebuild requested - build will proceed anyway"
-          elif [[ "$CONTAINER_EXISTS" == "true" && "$ATTESTATIONS_VALID" == "true" ]]; then
+          elif [[ $RESULT -eq 0 ]]; then
             echo "🚀 Build will be skipped - valid container already exists"
           else
             echo "🔨 Build will proceed"

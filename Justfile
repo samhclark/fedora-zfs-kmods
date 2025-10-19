@@ -30,38 +30,7 @@ check-compatibility:
     #!/usr/bin/env bash
     ZFS_VERSION=$(just zfs-version)
     KERNEL_MAJOR_MINOR=$(just kernel-major-minor)
-    
-    # Define compatibility matrix for ZFS versions
-    # Format: "zfs-version:max-kernel-version"
-    declare -A compatibility_matrix=(
-        ["zfs-2.2.7"]="6.12"
-        ["zfs-2.3.0"]="6.12"
-        ["zfs-2.3.1"]="6.13"
-        ["zfs-2.3.2"]="6.14"
-        ["zfs-2.2.8"]="6.15"
-        ["zfs-2.3.3"]="6.15"
-        ["zfs-2.3.4"]="6.16"
-    )
-    
-    # Check if we have compatibility info for this ZFS version
-    if [[ -z "${compatibility_matrix[$ZFS_VERSION]}" ]]; then
-        echo "ERROR: Unknown ZFS version $ZFS_VERSION"
-        echo "This version is not in the compatibility matrix."
-        echo "Please update the compatibility matrix in both the Justfile and workflow to include this version."
-        exit 1
-    fi
-    
-    MAX_KERNEL="${compatibility_matrix[$ZFS_VERSION]}"
-    
-    # Check if current kernel is compatible
-    if [[ $(echo "$KERNEL_MAJOR_MINOR $MAX_KERNEL" | tr ' ' '\n' | sort -V | tail -n1) != "$MAX_KERNEL" ]]; then
-        echo "ERROR: ZFS $ZFS_VERSION is only compatible with Linux kernels up to $MAX_KERNEL"
-        echo "Current kernel: $KERNEL_MAJOR_MINOR"
-        echo "Please wait for a newer ZFS release or use an older kernel"
-        exit 1
-    fi
-    
-    echo "✓ ZFS $ZFS_VERSION is compatible with kernel $KERNEL_MAJOR_MINOR (max: $MAX_KERNEL)"
+    ./scripts/check-compatibility.sh "$ZFS_VERSION" "$KERNEL_MAJOR_MINOR"
 
 # Show all versions that will be used for build
 versions:
@@ -219,100 +188,7 @@ workflow-status:
 # Test cleanup logic locally with configurable parameters
 cleanup-dry-run RETENTION_DAYS MIN_VERSIONS:
     #!/usr/bin/env bash
-    echo "🧪 Testing cleanup logic (DRY RUN)"
-    echo "📅 Retention period: {{RETENTION_DAYS}} days"
-    echo "🔒 Minimum versions to keep: {{MIN_VERSIONS}}"
-    echo ""
-    
-    # Calculate cutoff date
-    cutoff_date=$(date -d "{{RETENTION_DAYS}} days ago" -u +"%Y-%m-%dT%H:%M:%SZ")
-    echo "📅 Cutoff date: $cutoff_date"
-    echo ""
-    
-    # Query all package versions
-    echo "🔍 Querying all package versions..."
-    versions_json=$(gh api "/user/packages/container/fedora-zfs-kmods/versions" --paginate)
-    
-    # Parse and categorize versions
-    echo "📦 Found versions:"
-    echo "$versions_json" | jq -r '.[] | "\(.metadata.container.tags[]? // "<untagged>") - \(.created_at) - ID: \(.id)"' | sort
-    echo ""
-    
-    # Find ALL versioned tags (not limited yet)
-    all_versioned_tags=$(echo "$versions_json" | jq -r '
-      .[] | select(.metadata.container.tags[]? | test("^zfs-.*_kernel-.*$")) |
-      {created_at: .created_at, tag: .metadata.container.tags[], id: .id}' |
-      jq -s 'sort_by(.created_at) | reverse')
-    
-    # Count total versioned tags available
-    total_versioned_count=$(echo "$all_versioned_tags" | jq length)
-    echo "🏷️  Total versioned tags found: $total_versioned_count"
-    
-    # Early safety check - do we have enough versioned tags in the repository?
-    if [[ "$total_versioned_count" -lt {{MIN_VERSIONS}} ]]; then
-      echo "❌ EARLY SAFETY CHECK FAILED: Only $total_versioned_count versioned tags exist in repository (minimum {{MIN_VERSIONS}} required)"
-      echo "📋 Available versioned tags:"
-      echo "$all_versioned_tags" | jq -r '.[].tag'
-      echo ""
-      echo "🚨 Cannot proceed with cleanup - insufficient versioned tags to maintain minimum policy"
-      echo "This indicates the repository needs more tagged releases before cleanup can run safely"
-      exit 1
-    fi
-    
-    # Select the most recent N versioned tags to protect
-    protected_versioned_tags=$(echo "$all_versioned_tags" | jq -r ".[0:{{MIN_VERSIONS}}] | .[].tag")
-    echo "🛡️  Protected tags ({{MIN_VERSIONS}} most recent):"
-    echo "$protected_versioned_tags"
-    echo ""
-    
-    # Build protected digests list from retained images
-    echo "🔐 Building protected attestation digests..."
-    protected_digests=()
-    while IFS= read -r tag; do
-        if [[ -n "$tag" ]]; then
-            digest=$(echo "$versions_json" | jq -r --arg tag "$tag" '.[] | select(.metadata.container.tags[]? == $tag) | .name')
-            if [[ -n "$digest" && "$digest" != "null" ]]; then
-                attestation_tag="sha256-${digest#sha256:}"
-                protected_digests+=("$attestation_tag")
-                echo "  $tag -> $attestation_tag"
-            fi
-        fi
-    done <<< "$protected_versioned_tags"
-    echo ""
-    
-    # Create regex pattern for protected tags
-    protected_pattern=$(echo "$protected_versioned_tags" | tr '\n' '|' | sed 's/|$//')
-    
-    echo "🔍 Safety validation:"
-    echo "  - Total versioned tags in repository: $total_versioned_count"
-    echo "  - Versioned tags being protected: {{MIN_VERSIONS}}"
-    echo "  - Protected attestations: ${#protected_digests[@]}"
-    echo "✅ Safety check passed: $total_versioned_count versioned tags available, protecting {{MIN_VERSIONS}} most recent"
-    echo ""
-    
-    # Identify deletion candidates
-    echo "🗑️  Identifying deletion candidates..."
-    deletion_candidates=$(echo "$versions_json" | jq -r --arg cutoff "$cutoff_date" --argjson protected "$(printf '%s\n' "${protected_digests[@]}" | jq -R . | jq -s .)" --arg protected_tags "$protected_pattern" '
-        .[] | select(
-            (.created_at < $cutoff) and
-            ((.metadata.container.tags[]? | test($protected_tags)) | not) and
-            ((.metadata.container.tags[]? | IN($protected[])) | not)
-        ) | "\(.metadata.container.tags[]? // "<untagged>") - \(.created_at) - ID: \(.id)"'
-    )
-    
-    if [[ -n "$deletion_candidates" ]]; then
-        echo "$deletion_candidates" | sort
-        echo ""
-        echo "📊 Summary:"
-        echo "  - Deletion candidates: $(echo "$deletion_candidates" | wc -l)"
-    else
-        echo "  No versions would be deleted"
-        echo ""
-        echo "📊 Summary:"
-        echo "  - Deletion candidates: 0"
-    fi
-    
-    total_versions=$(echo "$versions_json" | jq length)
-    echo "  - Total versions: $total_versions"
-    echo "  - Protected versions: {{MIN_VERSIONS}}"
-    echo "  - Protected attestations: ${#protected_digests[@]}"
+    ./scripts/cleanup-container-images.sh \
+        --retention-days {{RETENTION_DAYS}} \
+        --min-versions {{MIN_VERSIONS}} \
+        --dry-run true

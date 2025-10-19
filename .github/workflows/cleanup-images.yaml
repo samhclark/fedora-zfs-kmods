@@ -21,6 +21,8 @@ jobs:
     permissions:
       packages: write
       contents: read
+    env:
+      CLEANUP_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run || 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -33,12 +35,12 @@ jobs:
           ./scripts/cleanup-container-images.sh \
             --retention-days 90 \
             --min-versions 3 \
-            --dry-run "${{ inputs.dry_run }}" \
+            --dry-run "${{ env.CLEANUP_DRY_RUN }}" \
             --github-output "$GITHUB_OUTPUT"
-      
+
       - name: Delete old package versions
         uses: actions/delete-package-versions@v5
-        if: steps.versions.outputs.delete_versions != '' && inputs.dry_run != 'true'
+        if: steps.versions.outputs.delete_versions != '' && env.CLEANUP_DRY_RUN != 'true'
         with:
           package-name: 'fedora-zfs-kmods'
           package-type: 'container'
@@ -46,7 +48,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Dry run summary
-        if: inputs.dry_run == 'true'
+        if: env.CLEANUP_DRY_RUN == 'true'
         run: |
           echo "🧪 DRY RUN COMPLETE"
           echo "This was a dry run - no versions were actually deleted."
@@ -70,7 +72,7 @@ jobs:
           echo "  - 90-day retention window enforced"
       
       - name: Cleanup completion summary
-        if: inputs.dry_run != 'true' && steps.versions.outputs.delete_versions != ''
+        if: env.CLEANUP_DRY_RUN != 'true' && steps.versions.outputs.delete_versions != ''
         run: |
           echo "✅ CLEANUP COMPLETED"
           echo "Successfully deleted older container versions while preserving:"

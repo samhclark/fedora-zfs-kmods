@@ -46,9 +46,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$retention_days" || -z "$min_versions" || -z "$dry_run" ]]; then
+if [[ -z "$retention_days" || -z "$min_versions" ]]; then
   usage
   exit 1
+fi
+
+if [[ -z "$dry_run" ]]; then
+  dry_run="true"
 fi
 
 if ! [[ $retention_days =~ ^[0-9]+$ ]]; then

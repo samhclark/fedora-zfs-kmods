@@ -1,5 +1,6 @@
 ARG FEDORA_VERSION
 ARG KERNEL_MAJOR_MINOR
+ARG KERNEL_VERSION
 ARG ZFS_VERSION
 
 #####
@@ -10,11 +11,13 @@ ARG ZFS_VERSION
 FROM quay.io/fedora/fedora-coreos:stable as kernel-query
 ARG FEDORA_VERSION
 ARG KERNEL_MAJOR_MINOR
+ARG KERNEL_VERSION
 ARG ZFS_VERSION
 
 # Confirm the actual kernel matches expectations
 RUN rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}' > /kernel-version.txt
 RUN [[ "$(cat /kernel-version.txt)" == ${KERNEL_MAJOR_MINOR}.* ]]
+RUN [[ "$(cat /kernel-version.txt)" == "${KERNEL_VERSION}" ]]
 
 # Confirm the actual Fedora version matches expectations
 RUN [[ "$(grep '^VERSION_ID=' /etc/os-release | cut -d'=' -f2)" == "${FEDORA_VERSION}" ]]
@@ -28,6 +31,7 @@ RUN [[ "$(grep '^VERSION_ID=' /etc/os-release | cut -d'=' -f2)" == "${FEDORA_VER
 FROM quay.io/fedora/fedora:${FEDORA_VERSION} as builder
 ARG ZFS_VERSION
 ARG FEDORA_VERSION
+ARG KERNEL_VERSION
 COPY --from=kernel-query /kernel-version.txt /kernel-version.txt
 COPY scripts/zfs-source-hashes.sh /tmp/zfs-source-hashes.sh
 
@@ -85,4 +89,32 @@ RUN mkdir -p /var/cache/rpms/kmods/zfs/{debug,devel,other,src} && \
 #
 #####
 FROM scratch
+ARG FEDORA_VERSION
+ARG KERNEL_MAJOR_MINOR
+ARG KERNEL_VERSION
+ARG ZFS_VERSION
+ARG BUILD_DATE="unknown"
+ARG VCS_REF="unknown"
+ARG SOURCE_URL="https://github.com/samhclark/fedora-zfs-kmods"
+ARG DOCUMENTATION_URL="https://github.com/samhclark/fedora-zfs-kmods#readme"
+ARG REF_NAME="unknown"
+
+LABEL \
+    org.opencontainers.image.created="${BUILD_DATE}" \
+    org.opencontainers.image.authors="Sam Clark (https://github.com/samhclark)" \
+    org.opencontainers.image.url="${SOURCE_URL}" \
+    org.opencontainers.image.source="${SOURCE_URL}" \
+    org.opencontainers.image.documentation="${DOCUMENTATION_URL}" \
+    org.opencontainers.image.version="${ZFS_VERSION}" \
+    org.opencontainers.image.revision="${VCS_REF}" \
+    org.opencontainers.image.vendor="Sam Clark" \
+    org.opencontainers.image.title="Fedora ZFS kernel modules RPM bundle" \
+    org.opencontainers.image.description="Pre-built ZFS kernel module RPMs for Fedora CoreOS." \
+    org.opencontainers.image.licenses="CDDL-1.0" \
+    org.opencontainers.image.ref.name="${REF_NAME}" \
+    io.github.samhclark.fedora-zfs-kmods.kernel.version="${KERNEL_VERSION}" \
+    io.github.samhclark.fedora-zfs-kmods.kernel.major_minor="${KERNEL_MAJOR_MINOR}" \
+    io.github.samhclark.fedora-zfs-kmods.zfs.tag="${ZFS_VERSION}" \
+    io.github.samhclark.fedora-zfs-kmods.fedora.version="${FEDORA_VERSION}"
+
 COPY --from=builder /var/cache/rpms/kmods/zfs/ /

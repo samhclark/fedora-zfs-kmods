@@ -2,13 +2,13 @@
 
 # shellcheck disable=SC2034 # Allow unused associative array when sourced
 declare -A ZFS_TARBALL_SHA256S=(
-  ["zfs-2.2.7"]="__REPLACE_WITH_ACTUAL_SHA256_FOR_zfs-2.2.7__"
-  ["zfs-2.2.8"]="__REPLACE_WITH_ACTUAL_SHA256_FOR_zfs-2.2.8__"
-  ["zfs-2.3.0"]="__REPLACE_WITH_ACTUAL_SHA256_FOR_zfs-2.3.0__"
-  ["zfs-2.3.1"]="__REPLACE_WITH_ACTUAL_SHA256_FOR_zfs-2.3.1__"
-  ["zfs-2.3.2"]="__REPLACE_WITH_ACTUAL_SHA256_FOR_zfs-2.3.2__"
-  ["zfs-2.3.3"]="__REPLACE_WITH_ACTUAL_SHA256_FOR_zfs-2.3.3__"
-  ["zfs-2.3.4"]="__REPLACE_WITH_ACTUAL_SHA256_FOR_zfs-2.3.4__"
+  ["zfs-2.2.7"]="c144057d631d8a1a140f78db884b207e811c42a35ee4c3a6504ad438f237d974"
+  ["zfs-2.2.8"]="a57b2cdd6ad5c15373d2e64313c2858e13530d0f255183db17b6a740e1a745c0"
+  ["zfs-2.3.0"]="d4e8343c2ad91301c08d47df9b32d5ec4c9fe458d00e74df41e0d58ecbd44bfd"
+  ["zfs-2.3.1"]="b870b9e21a34e6f14e04bcaf3795d14ce57270ea1f339f12b4cad25a10841e74"
+  ["zfs-2.3.2"]="877a6b37755245955fadd68cee2f2729f7acc10e2aad5dd77a6426a8d46aca83"
+  ["zfs-2.3.3"]="ba8db7766e6724dc1c1b9287174bc9022dab521919d3353dc488aad9e55de541"
+  ["zfs-2.3.4"]="940af1303a01df3228b3e136a2ae99bb4d7a894f71f804cf7d3ae198f959dd46"
 )
 
 lookup_zfs_tarball_hash() {

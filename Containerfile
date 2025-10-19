@@ -26,7 +26,6 @@ RUN [[ "$(grep '^VERSION_ID=' /etc/os-release | cut -d'=' -f2)" == "${FEDORA_VER
 #
 #####
 FROM quay.io/fedora/fedora:${FEDORA_VERSION} as builder
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG ZFS_VERSION
 ARG FEDORA_VERSION
 COPY --from=kernel-query /kernel-version.txt /kernel-version.txt

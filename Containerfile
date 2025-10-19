@@ -29,6 +29,7 @@ FROM quay.io/fedora/fedora:${FEDORA_VERSION} as builder
 ARG ZFS_VERSION
 ARG FEDORA_VERSION
 COPY --from=kernel-query /kernel-version.txt /kernel-version.txt
+COPY scripts/zfs-source-hashes.sh /tmp/zfs-source-hashes.sh
 
 # Need to add the updates archive to install specific kernel versions
 RUN dnf install -y fedora-repos-archive
@@ -46,9 +47,21 @@ RUN KERNEL_VERSION="$(cat /kernel-version.txt)" && \
 
 # Build ZFS
 WORKDIR /zfs
-RUN export KERNEL_VERSION="$(cat /kernel-version.txt)" && \
-    curl -L "https://github.com/openzfs/zfs/archive/refs/tags/${ZFS_VERSION}.tar.gz" | \
-        tar xzf - -C . --strip-components 1
+RUN set -euo pipefail \
+    && source /tmp/zfs-source-hashes.sh \
+    && EXPECTED_HASH="$(lookup_zfs_tarball_hash "$ZFS_VERSION")" \
+    && TARBALL_PATH="$(mktemp)" \
+    && curl --fail --location "https://github.com/openzfs/zfs/archive/refs/tags/${ZFS_VERSION}.tar.gz" \
+        --output "$TARBALL_PATH" \
+    && ACTUAL_HASH="$(sha256sum "$TARBALL_PATH" | awk '{print $1}')" \
+    && if [[ "$EXPECTED_HASH" != "$ACTUAL_HASH" ]]; then \
+        echo "ERROR: Hash mismatch for ${ZFS_VERSION}" >&2; \
+        echo "Expected: $EXPECTED_HASH" >&2; \
+        echo "Actual:   $ACTUAL_HASH" >&2; \
+        exit 1; \
+    fi \
+    && tar xzf "$TARBALL_PATH" -C . --strip-components 1 \
+    && rm -f "$TARBALL_PATH"
 
 RUN export KERNEL_VERSION="$(cat /kernel-version.txt)" && \
     ./autogen.sh && \

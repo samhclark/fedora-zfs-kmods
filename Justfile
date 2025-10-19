@@ -7,6 +7,16 @@ _default:
 zfs-version:
     ./scripts/query-zfs-version.sh | jq -r '.["zfs-tag"]'
 
+# Compute the sha256 for a ZFS release tarball
+zfs-tarball-hash TAG:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    TARBALL_PATH=$(mktemp)
+    trap 'rm -f "$TARBALL_PATH"' EXIT
+    curl --fail --location "https://github.com/openzfs/zfs/archive/refs/tags/{{TAG}}.tar.gz" \
+        --output "$TARBALL_PATH"
+    sha256sum "$TARBALL_PATH" | awk '{print $1}'
+
 # Get kernel version from Fedora CoreOS stable (super fast with remote inspection)
 kernel-version:
     ./scripts/query-kernel-info.sh | jq -r '.["kernel-version"]'

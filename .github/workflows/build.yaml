@@ -117,6 +117,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - name: Prepare build metadata
+        id: meta
+        run: |
+          echo "build-date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+          echo "source-url=${{ github.server_url }}/${{ github.repository }}" >> $GITHUB_OUTPUT
+          echo "documentation-url=${{ github.server_url }}/${{ github.repository }}#readme" >> $GITHUB_OUTPUT
+          echo "ref-name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.check-existing.outputs.target-tag }}" >> $GITHUB_OUTPUT
+
       - name: Build container image
         id: build
         uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2.13
@@ -130,6 +138,12 @@ jobs:
             ZFS_VERSION=${{ needs.query-versions.outputs.zfs-tag }}
             FEDORA_VERSION=${{ needs.query-versions.outputs.fedora-version }}
             KERNEL_MAJOR_MINOR=${{ needs.query-versions.outputs.kernel-major-minor }}
+            KERNEL_VERSION=${{ needs.query-versions.outputs.kernel-version }}
+            BUILD_DATE=${{ steps.meta.outputs.build-date }}
+            VCS_REF=${{ github.sha }}
+            SOURCE_URL=${{ steps.meta.outputs.source-url }}
+            DOCUMENTATION_URL=${{ steps.meta.outputs.documentation-url }}
+            REF_NAME=${{ steps.meta.outputs.ref-name }}
 
       - name: Log in to Container Registry
         uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1.7

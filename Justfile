@@ -88,6 +88,11 @@ build:
     KERNEL_VERSION=$(just kernel-version)
     KERNEL_MAJOR_MINOR=$(just kernel-major-minor)
     FEDORA_VERSION=$(just fedora-version)
+    BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    VCS_REF=$(git rev-parse HEAD)
+    SOURCE_URL="https://github.com/samhclark/fedora-zfs-kmods"
+    DOCUMENTATION_URL="https://github.com/samhclark/fedora-zfs-kmods#readme"
+    REF_NAME="fedora-zfs-kmods:zfs-${ZFS_VERSION#zfs-}_kernel-${KERNEL_VERSION}"
     
     echo "Building with:"
     echo "  ZFS_VERSION=$ZFS_VERSION"
@@ -98,7 +103,13 @@ build:
     podman build --rm \
         --build-arg ZFS_VERSION="$ZFS_VERSION" \
         --build-arg KERNEL_MAJOR_MINOR="$KERNEL_MAJOR_MINOR" \
+        --build-arg KERNEL_VERSION="$KERNEL_VERSION" \
         --build-arg FEDORA_VERSION="$FEDORA_VERSION" \
+        --build-arg BUILD_DATE="$BUILD_DATE" \
+        --build-arg VCS_REF="$VCS_REF" \
+        --build-arg SOURCE_URL="$SOURCE_URL" \
+        --build-arg DOCUMENTATION_URL="$DOCUMENTATION_URL" \
+        --build-arg REF_NAME="$REF_NAME" \
         -t "fedora-zfs-kmods:zfs-${ZFS_VERSION#zfs-}_kernel-${KERNEL_VERSION}" \
         .
 
@@ -108,8 +119,13 @@ test-build:
     just check-compatibility
     
     ZFS_VERSION=$(just zfs-version)
+    KERNEL_VERSION=$(just kernel-version)
     KERNEL_MAJOR_MINOR=$(just kernel-major-minor)
     FEDORA_VERSION=$(just fedora-version)
+    BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    VCS_REF=$(git rev-parse HEAD)
+    SOURCE_URL="https://github.com/samhclark/fedora-zfs-kmods"
+    DOCUMENTATION_URL="https://github.com/samhclark/fedora-zfs-kmods#readme"
     
     echo "Test building with:"
     echo "  ZFS_VERSION=$ZFS_VERSION"
@@ -120,7 +136,13 @@ test-build:
     podman build --rm \
         --build-arg ZFS_VERSION="$ZFS_VERSION" \
         --build-arg KERNEL_MAJOR_MINOR="$KERNEL_MAJOR_MINOR" \
+        --build-arg KERNEL_VERSION="$KERNEL_VERSION" \
         --build-arg FEDORA_VERSION="$FEDORA_VERSION" \
+        --build-arg BUILD_DATE="$BUILD_DATE" \
+        --build-arg VCS_REF="$VCS_REF" \
+        --build-arg SOURCE_URL="$SOURCE_URL" \
+        --build-arg DOCUMENTATION_URL="$DOCUMENTATION_URL" \
+        --build-arg REF_NAME="fedora-zfs-kmods:test" \
         -t "fedora-zfs-kmods:test" \
         . && podman rmi "fedora-zfs-kmods:test"
 

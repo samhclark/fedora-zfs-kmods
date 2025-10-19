@@ -5,11 +5,7 @@ _default:
 
 # Get the latest ZFS 2.3.x version tag
 zfs-version:
-    gh release list \
-        --repo openzfs/zfs \
-        --json publishedAt,tagName \
-        --jq '[.[] | select(.tagName | startswith("zfs-2.3"))] | sort_by(.publishedAt) | last | .tagName' \
-        --limit 100
+    ./scripts/query-zfs-version.sh | jq -r '.["zfs-tag"]'
 
 # Get kernel version from Fedora CoreOS stable (super fast with remote inspection)
 kernel-version:
@@ -45,21 +41,13 @@ check-container-exists:
     #!/usr/bin/env bash
     ZFS_VERSION=$(just zfs-version | sed 's/^zfs-//')
     KERNEL_VERSION=$(just kernel-version)
-    TARGET_TAG="zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION}"
-    
-    echo "🔍 Checking for existing container with tag: $TARGET_TAG"
-    
-    # Check GitHub Container Registry API
-    CONTAINER_EXISTS=$(gh api "/user/packages/container/fedora-zfs-kmods/versions" | \
-        jq --arg tag "$TARGET_TAG" \
-        '[.[] | .metadata.container.tags[]? | select(. == $tag)] | length > 0')
-    
-    if [[ "$CONTAINER_EXISTS" == "true" ]]; then
-        echo "✅ Container already exists: $TARGET_TAG"
+
+    if ./scripts/check-container.sh \
+        --zfs-version "$ZFS_VERSION" \
+        --kernel-version "$KERNEL_VERSION"; then
         echo "🚀 Build would be skipped"
         exit 0
     else
-        echo "🔨 Container does not exist: $TARGET_TAG"
         echo "🔨 Build would proceed"
         exit 1
     fi
@@ -69,39 +57,11 @@ check-container-with-attestations:
     #!/usr/bin/env bash
     ZFS_VERSION=$(just zfs-version | sed 's/^zfs-//')
     KERNEL_VERSION=$(just kernel-version)
-    TARGET_TAG="zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION}"
-    IMAGE="ghcr.io/samhclark/fedora-zfs-kmods:${TARGET_TAG}"
-    
-    echo "🔍 Checking for existing container with tag: $TARGET_TAG"
-    
-    # Step 1: Check container existence
-    CONTAINER_EXISTS=$(gh api "/user/packages/container/fedora-zfs-kmods/versions" | \
-        jq --arg tag "$TARGET_TAG" \
-        '[.[] | .metadata.container.tags[]? | select(. == $tag)] | length > 0')
-    
-    # Step 2: If container exists, verify attestations
-    if [[ "$CONTAINER_EXISTS" == "true" ]]; then
-        echo "✅ Container exists: $TARGET_TAG"
-        echo "🔐 Checking attestations..."
-        
-        DIGEST=$(skopeo inspect docker://${IMAGE} | jq -r '.Digest')
-        IMAGE_WITH_DIGEST="${IMAGE}@${DIGEST}"
-        echo "📋 Verifying attestations for: ${IMAGE_WITH_DIGEST}"
-        
-        if gh attestation verify --repo samhclark/fedora-zfs-kmods "oci://${IMAGE_WITH_DIGEST}"; then
-            echo "✅ Valid attestations found"
-            ATTESTATIONS_VALID="true"
-        else
-            echo "❌ Invalid or missing attestations"
-            ATTESTATIONS_VALID="false"
-        fi
-    else
-        echo "🔨 Container does not exist: $TARGET_TAG"
-        ATTESTATIONS_VALID="false"
-    fi
-    
-    # Step 3: Final decision
-    if [[ "$CONTAINER_EXISTS" == "true" && "$ATTESTATIONS_VALID" == "true" ]]; then
+
+    if ./scripts/check-container.sh \
+        --zfs-version "$ZFS_VERSION" \
+        --kernel-version "$KERNEL_VERSION" \
+        --require-attestations true; then
         echo "🚀 Build would be skipped - valid container already exists"
         exit 0
     else

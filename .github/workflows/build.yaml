@@ -50,19 +50,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Get the latest ZFS 2.3.x release
-          ZFS_VERSION=$(gh release list \
-            --repo openzfs/zfs \
-            --json publishedAt,tagName \
-            --jq '[.[] | select(.tagName | startswith("zfs-2.3"))] | sort_by(.publishedAt) | last | .tagName' \
-            --limit 100)
-          
-          # Extract just the version part for tagging
-          ZFS_VERSION_CLEAN=${ZFS_VERSION#zfs-}
-          
-          echo "zfs-tag=$ZFS_VERSION" >> $GITHUB_OUTPUT
-          echo "zfs-version=$ZFS_VERSION_CLEAN" >> $GITHUB_OUTPUT
-          echo "Found ZFS version: $ZFS_VERSION"
+          INFO_JSON=$(./scripts/query-zfs-version.sh)
+
+          ZFS_TAG=$(echo "$INFO_JSON" | jq -r '."zfs-tag"')
+          ZFS_VERSION=$(echo "$INFO_JSON" | jq -r '."zfs-version"')
+
+          echo "zfs-tag=$ZFS_TAG" >> $GITHUB_OUTPUT
+          echo "zfs-version=$ZFS_VERSION" >> $GITHUB_OUTPUT
+          echo "Found ZFS version: $ZFS_TAG"
 
       - name: Check ZFS-kernel compatibility
         run: |
@@ -83,56 +78,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Use versions from query-versions job
           ZFS_VERSION="${{ needs.query-versions.outputs.zfs-version }}"
           KERNEL_VERSION="${{ needs.query-versions.outputs.kernel-version }}"
           TARGET_TAG="zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION}"
-          IMAGE="ghcr.io/samhclark/fedora-zfs-kmods:${TARGET_TAG}"
           FORCE_REBUILD="${{ inputs.force_rebuild }}"
-          
-          echo "🔍 Checking for existing container with tag: $TARGET_TAG"
-          
-          # Step 1: Check container existence
-          CONTAINER_EXISTS=$(gh api "/user/packages/container/fedora-zfs-kmods/versions" | \
-            jq --arg tag "$TARGET_TAG" \
-            '[.[] | .metadata.container.tags[]? | select(. == $tag)] | length > 0')
-          
-          # Step 2: If container exists, verify attestations
-          if [[ "$CONTAINER_EXISTS" == "true" ]]; then
-            echo "✅ Container exists: $TARGET_TAG"
-            echo "🔐 Checking attestations..."
-            
-            DIGEST=$(skopeo inspect docker://${IMAGE} | jq -r '.Digest')
-            IMAGE_WITH_DIGEST="${IMAGE}@${DIGEST}"
-            echo "📋 Verifying attestations for: ${IMAGE_WITH_DIGEST}"
-            
-            if gh attestation verify --repo samhclark/fedora-zfs-kmods "oci://${IMAGE_WITH_DIGEST}"; then
-              echo "✅ Valid attestations found"
-              ATTESTATIONS_VALID="true"
-            else
-              echo "❌ Invalid or missing attestations"
-              ATTESTATIONS_VALID="false"
-              # Override container-exists to force rebuild
-              echo "container-exists=false" >> $GITHUB_OUTPUT
-              echo "target-tag=${TARGET_TAG}" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "🔨 Container does not exist: $TARGET_TAG"
-            ATTESTATIONS_VALID="false"
-          fi
-          
-          # Set job outputs (reflect true state unless attestations are invalid)
-          if [[ "$CONTAINER_EXISTS" == "true" && "$ATTESTATIONS_VALID" == "true" ]]; then
-            echo "container-exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "container-exists=false" >> $GITHUB_OUTPUT
-          fi
-          echo "target-tag=${TARGET_TAG}" >> $GITHUB_OUTPUT
-          
-          # Step 3: Final logging with force rebuild consideration
+
+          set +e
+          ./scripts/check-container.sh \
+            --zfs-version "$ZFS_VERSION" \
+            --kernel-version "$KERNEL_VERSION" \
+            --require-attestations true \
+            --github-output "$GITHUB_OUTPUT"
+          RESULT=$?
+          set -e
+
           if [[ "$FORCE_REBUILD" == "true" ]]; then
             echo "🔄 Force rebuild requested - build will proceed anyway"
-          elif [[ "$CONTAINER_EXISTS" == "true" && "$ATTESTATIONS_VALID" == "true" ]]; then
+          elif [[ $RESULT -eq 0 ]]; then
             echo "🚀 Build will be skipped - valid container already exists"
           else
             echo "🔨 Build will proceed"

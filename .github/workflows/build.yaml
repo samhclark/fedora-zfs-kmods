@@ -32,19 +32,17 @@ jobs:
       - name: Query kernel and OS version from container labels
         id: kernel-info
         run: |
-          # Get kernel version from remote container labels (no pull required!)
-          KERNEL_VERSION=$(skopeo inspect docker://quay.io/fedora/fedora-coreos:stable | jq -r '.Labels."ostree.linux"')
-          
-          # Extract major.minor version for build args
-          KERNEL_MAJOR_MINOR=$(echo "$KERNEL_VERSION" | cut -d'.' -f1-2)
-          
-          # Get Fedora version from container version label
-          FEDORA_VERSION=$(skopeo inspect docker://quay.io/fedora/fedora-coreos:stable | jq -r '.Labels."org.opencontainers.image.version" | split(".")[0]')
-          
+          INFO_JSON=$(./scripts/query-kernel-info.sh)
+
+          KERNEL_VERSION=$(echo "$INFO_JSON" | jq -r '."kernel-version"')
+          KERNEL_MAJOR_MINOR=$(echo "$INFO_JSON" | jq -r '."kernel-major-minor"')
+          FEDORA_VERSION=$(echo "$INFO_JSON" | jq -r '."fedora-version"')
+
           echo "kernel-version=$KERNEL_VERSION" >> $GITHUB_OUTPUT
           echo "kernel-major-minor=$KERNEL_MAJOR_MINOR" >> $GITHUB_OUTPUT
           echo "fedora-version=$FEDORA_VERSION" >> $GITHUB_OUTPUT
           echo "Found kernel version: $KERNEL_VERSION"
+          echo "Found kernel major.minor: $KERNEL_MAJOR_MINOR"
           echo "Found Fedora version: $FEDORA_VERSION"
 
       - name: Find latest ZFS version

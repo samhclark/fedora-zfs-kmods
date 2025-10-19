@@ -13,17 +13,15 @@ zfs-version:
 
 # Get kernel version from Fedora CoreOS stable (super fast with remote inspection)
 kernel-version:
-    skopeo inspect docker://quay.io/fedora/fedora-coreos:stable | jq -r '.Labels."ostree.linux"'
+    ./scripts/query-kernel-info.sh | jq -r '.["kernel-version"]'
 
 # Get kernel major.minor version
 kernel-major-minor:
-    #!/usr/bin/env bash
-    KERNEL_VERSION=$(skopeo inspect docker://quay.io/fedora/fedora-coreos:stable | jq -r '.Labels."ostree.linux"')
-    echo "$KERNEL_VERSION" | cut -d'.' -f1-2
+    ./scripts/query-kernel-info.sh | jq -r '.["kernel-major-minor"]'
 
 # Get Fedora version from CoreOS (super fast with remote inspection)
 fedora-version:
-    skopeo inspect docker://quay.io/fedora/fedora-coreos:stable | jq -r '.Labels."org.opencontainers.image.version" | split(".")[0]'
+    ./scripts/query-kernel-info.sh | jq -r '.["fedora-version"]'
 
 # Check if ZFS version is compatible with kernel version
 check-compatibility:

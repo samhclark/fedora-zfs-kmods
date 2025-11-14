@@ -15,6 +15,12 @@ if [[ -z "${CONTAINER_CLI}" ]]; then
 fi
 
 INSPECT_OUTPUT=$(skopeo inspect "docker://${IMAGE}")
+DIGEST=$(jq -r '.Digest' <<<"${INSPECT_OUTPUT}")
+if [[ -n "${DIGEST}" && "${DIGEST}" != "null" ]]; then
+  IMAGE_WITH_DIGEST="${IMAGE}@${DIGEST}"
+else
+  IMAGE_WITH_DIGEST="${IMAGE}"
+fi
 
 KERNEL_VERSION=$(jq -r '.Labels["ostree.linux"]' <<<"${INSPECT_OUTPUT}")
 if [[ -z "${KERNEL_VERSION}" || "${KERNEL_VERSION}" == "null" ]]; then
@@ -23,7 +29,7 @@ if [[ -z "${KERNEL_VERSION}" || "${KERNEL_VERSION}" == "null" ]]; then
     exit 1
   fi
 
-  if ! RPM_QUERY_OUTPUT=$("${CONTAINER_CLI}" run --rm --entrypoint rpm "${IMAGE}" \
+  if ! RPM_QUERY_OUTPUT=$("${CONTAINER_CLI}" run --rm --entrypoint rpm "${IMAGE_WITH_DIGEST}" \
     -q kernel-core --qf '%{VERSION}-%{RELEASE}.%{ARCH}\n'); then
     echo "Failed to run rpm fallback inside ${IMAGE}" >&2
     exit 1

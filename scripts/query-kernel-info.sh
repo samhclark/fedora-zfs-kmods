@@ -2,14 +2,24 @@
 set -euo pipefail
 
 IMAGE="${1:-quay.io/fedora/fedora-coreos:stable}"
-CONTAINER_CLI="${CONTAINER_CLI:-podman}"
+CONTAINER_CLI="${CONTAINER_CLI:-}"
+
+if [[ -z "${CONTAINER_CLI}" ]]; then
+  if command -v podman >/dev/null 2>&1; then
+    CONTAINER_CLI="podman"
+  elif command -v docker >/dev/null 2>&1; then
+    CONTAINER_CLI="docker"
+  else
+    CONTAINER_CLI=""
+  fi
+fi
 
 INSPECT_OUTPUT=$(skopeo inspect "docker://${IMAGE}")
 
 KERNEL_VERSION=$(jq -r '.Labels["ostree.linux"]' <<<"${INSPECT_OUTPUT}")
 if [[ -z "${KERNEL_VERSION}" || "${KERNEL_VERSION}" == "null" ]]; then
-  if ! command -v "${CONTAINER_CLI}" >/dev/null 2>&1; then
-    echo "Failed to determine kernel version from ${IMAGE} and ${CONTAINER_CLI} not available for fallback" >&2
+  if [[ -z "${CONTAINER_CLI}" ]]; then
+    echo "Failed to determine kernel version from ${IMAGE} and no container runtime available for fallback" >&2
     exit 1
   fi
 

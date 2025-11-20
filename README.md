@@ -114,8 +114,9 @@ When a new ZFS version is released:
 2. **Update the compatibility matrix** in both:
    - `Justfile` (line ~40-45)
    - `.github/workflows/build.yaml` (line ~67-73)
-3. **Test locally** with `just build`
-4. **Run the workflow** to build and publish
+3. **Record the tarball hash** in `scripts/zfs-source-hashes.sh` using `just zfs-tarball-hash <version>`
+4. **Test locally** with `just build`
+5. **Run the workflow** to build and publish
 
 ### Upgrading to New Major/Minor Versions
 

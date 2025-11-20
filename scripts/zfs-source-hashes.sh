@@ -9,6 +9,7 @@ declare -A ZFS_TARBALL_SHA256S=(
   ["zfs-2.3.2"]="877a6b37755245955fadd68cee2f2729f7acc10e2aad5dd77a6426a8d46aca83"
   ["zfs-2.3.3"]="ba8db7766e6724dc1c1b9287174bc9022dab521919d3353dc488aad9e55de541"
   ["zfs-2.3.4"]="940af1303a01df3228b3e136a2ae99bb4d7a894f71f804cf7d3ae198f959dd46"
+  ["zfs-2.3.5"]="f7513a31368924493b1715439337f3f7720a5d8d873300c6cd1741fac8616b85"
 )
 
 lookup_zfs_tarball_hash() {

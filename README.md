@@ -31,11 +31,11 @@ ghcr.io/samhclark/fedora-zfs-kmods:zfs-{zfs-version}_kernel-{kernel-version}
 
 Example:
 ```
-ghcr.io/samhclark/fedora-zfs-kmods:zfs-2.3.3_kernel-6.15.4-200.fc42.x86_64
+ghcr.io/samhclark/fedora-zfs-kmods:zfs-2.4.0_kernel-6.18.3-200.fc42.x86_64
 ```
 
 Where:
-- `zfs-version` is the ZFS release version (e.g., `2.3.3`)
+- `zfs-version` is the ZFS release version (e.g., `2.4.0`)
 - `kernel-version` comes from `rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}'`
 
 ## Local Development
@@ -81,9 +81,9 @@ just cleanup-dry-run 90 3   # Test with production settings
 ### Individual Version Queries
 
 ```bash
-just zfs-version           # Latest ZFS 2.3.x version
+just zfs-version           # Latest ZFS 2.4.x version
 just kernel-version        # Current CoreOS kernel version
-just kernel-major-minor    # Kernel major.minor (e.g., 6.15)
+just kernel-major-minor    # Kernel major.minor (e.g., 6.18)
 just fedora-version        # Fedora version from CoreOS
 ```
 
@@ -91,7 +91,7 @@ just fedora-version        # Fedora version from CoreOS
 
 ### Version Compatibility Matrix
 
-Both the Justfile and GitHub workflow maintain a compatibility matrix that maps ZFS versions to their maximum supported kernel versions:
+The compatibility matrix in `scripts/check-compatibility.sh` maps ZFS versions to their maximum supported kernel versions:
 
 ```bash
 declare -A compatibility_matrix=(
@@ -103,6 +103,7 @@ declare -A compatibility_matrix=(
     ["zfs-2.3.3"]="6.15"
     ["zfs-2.3.4"]="6.16"
     ["zfs-2.3.5"]="6.17"
+    ["zfs-2.4.0"]="6.18"
 )
 ```
 
@@ -111,22 +112,19 @@ declare -A compatibility_matrix=(
 When a new ZFS version is released:
 
 1. **Check kernel compatibility** in the ZFS release notes
-2. **Update the compatibility matrix** in both:
-   - `Justfile` (line ~40-45)
-   - `.github/workflows/build.yaml` (line ~67-73)
+2. **Update the compatibility matrix** in `scripts/check-compatibility.sh`
 3. **Record the tarball hash** in `scripts/zfs-source-hashes.sh` using `just zfs-tarball-hash <version>`
 4. **Test locally** with `just build`
 5. **Run the workflow** to build and publish
 
 ### Upgrading to New Major/Minor Versions
 
-To upgrade from ZFS 2.3.x to 2.4.x (when available):
+To upgrade from ZFS 2.4.x to 2.5.x (when available):
 
-1. **Update ZFS version queries** in both:
-   - `Justfile`: Change `startswith("zfs-2.3")` to `startswith("zfs-2.4")`
-   - `.github/workflows/build.yaml`: Same change
-2. **Update compatibility matrix** with new version mappings
-3. **Test thoroughly** before using in production
+1. **Update ZFS version query prefix** in `scripts/query-zfs-version.sh`: Change `PREFIX="zfs-2.4"` to `PREFIX="zfs-2.5"`
+2. **Update compatibility matrix** in `scripts/check-compatibility.sh` with new version mappings
+3. **Add tarball hash** in `scripts/zfs-source-hashes.sh`
+4. **Test thoroughly** before using in production
 
 ## GitHub Actions Workflow
 
@@ -158,7 +156,7 @@ A separate cleanup workflow runs **weekly on Sundays at 2 AM UTC** to remove old
 
 1. **Query versions job** (runs in CoreOS container):
    - Extracts kernel and Fedora versions from CoreOS stable
-   - Finds latest ZFS 2.3.x release
+   - Finds latest ZFS 2.4.x release
    - Checks version compatibility
    
 2. **Build job** (runs on Ubuntu):
@@ -229,8 +227,8 @@ ARG KERNEL_MAJOR_MINOR
 
 # Stage 2: Pull pre-built ZFS RPMs  
 # IMPORTANT: Must match exact ZFS and kernel versions
-ARG ZFS_VERSION=2.3.3
-ARG KERNEL_VERSION=6.15.4-200.fc42.x86_64
+ARG ZFS_VERSION=2.4.0
+ARG KERNEL_VERSION=6.18.3-200.fc42.x86_64
 FROM ghcr.io/samhclark/fedora-zfs-kmods:zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION} as zfs-rpms
 
 # Stage 3: Install RPMs in CoreOS image

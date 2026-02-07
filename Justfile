@@ -3,7 +3,7 @@
 _default:
     @just --list
 
-# Get the latest ZFS 2.3.x version tag
+# Get the latest ZFS 2.4.x version tag
 zfs-version:
     ./scripts/query-zfs-version.sh | jq -r '.["zfs-tag"]'
 

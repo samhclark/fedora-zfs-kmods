@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PREFIX="zfs-2.3"
+PREFIX="zfs-2.4"
 
 usage() {
   cat <<USAGE
 Usage: $0 [--prefix PREFIX]
 
 Options:
-  --prefix PREFIX   ZFS release tag prefix to search for (default: zfs-2.3)
+  --prefix PREFIX   ZFS release tag prefix to search for (default: zfs-2.4)
   -h, --help        Show this help message
 USAGE
 }

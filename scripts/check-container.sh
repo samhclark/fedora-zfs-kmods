@@ -6,8 +6,8 @@ usage() {
 Usage: $0 --zfs-version VERSION --kernel-version VERSION [--require-attestations true|false] [--github-output PATH]
 
 Options:
-  --zfs-version VERSION        ZFS version without the "zfs-" prefix (e.g., 2.3.4)
-  --kernel-version VERSION     Full kernel version string (e.g., 6.16.10-200.fc42.x86_64)
+  --zfs-version VERSION        ZFS version without the "zfs-" prefix (e.g., 2.4.0)
+  --kernel-version VERSION     Full kernel version string (e.g., 6.18.3-200.fc42.x86_64)
   --require-attestations FLAG  Require attestations to be valid (default: false)
   --github-output PATH         Append key=value pairs suitable for GitHub Actions outputs
   -h, --help                   Show this help message

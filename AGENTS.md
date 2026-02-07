@@ -20,7 +20,7 @@ The approach is necessary because `rpm-ostree install zfs` from the standard ZFS
 2. **build job**: Builds and publishes container images with proper attestations
 
 ### Compatibility System
-Both Justfile and workflow maintain identical compatibility matrices mapping ZFS versions to maximum supported kernel versions. Builds fail early if:
+The compatibility matrix in `scripts/check-compatibility.sh` maps ZFS versions to maximum supported kernel versions. Builds fail early if:
 - Unknown ZFS version encountered (forces manual matrix updates)
 - Current kernel exceeds ZFS compatibility limits
 
@@ -54,7 +54,7 @@ RPMs organized in final image:
 just versions                    # Show all versions and check compatibility
 just check-compatibility         # Verify ZFS/kernel compatibility
 just check-container-exists      # Check if container already exists for current versions
-just zfs-version                 # Latest ZFS 2.3.x release
+just zfs-version                 # Latest ZFS 2.4.x release
 just kernel-version              # Current CoreOS kernel version
 
 # Building and testing
@@ -84,8 +84,8 @@ just workflow-status             # Check workflow run status
 ```bash
 # Developed and tested locally first
 just check-container-exists
-# 🔍 Checking for existing container with tag: zfs-2.3.3_kernel-6.15.4-200.fc42.x86_64
-# ✅ Container already exists: zfs-2.3.3_kernel-6.15.4-200.fc42.x86_64
+# 🔍 Checking for existing container with tag: zfs-2.4.0_kernel-6.18.3-200.fc42.x86_64
+# ✅ Container already exists: zfs-2.4.0_kernel-6.18.3-200.fc42.x86_64
 
 # Then ported to .github/workflows/build.yaml with identical logic
 ```
@@ -95,9 +95,9 @@ This approach saved significant development time by avoiding the GitHub Actions 
 ## Build Arguments
 
 All required (no defaults):
-- `ZFS_VERSION`: Full ZFS tag (e.g., "zfs-2.3.3")
+- `ZFS_VERSION`: Full ZFS tag (e.g., "zfs-2.4.0")
 - `FEDORA_VERSION`: Fedora version number (e.g., "42") 
-- `KERNEL_MAJOR_MINOR`: Kernel major.minor (e.g., "6.15")
+- `KERNEL_MAJOR_MINOR`: Kernel major.minor (e.g., "6.18")
 
 ## Integration Context
 
@@ -118,7 +118,7 @@ This replaces ~40 lines of ZFS build-from-source with 3 lines of RPM installatio
 
 ## Version Management Strategy
 
-- ZFS version selection pinned to 2.3.x series for stability (avoid .0 releases that could cause data loss)
+- ZFS version selection pinned to 2.4.x series for stability
 - Manual version progression prevents accidental NAS upgrades
 - Compatibility matrix must be updated for each new ZFS release
 - Build fails safe when encountering unknown versions
@@ -128,7 +128,7 @@ This replaces ~40 lines of ZFS build-from-source with 3 lines of RPM installatio
 GitHub Actions automatically generates and publishes build attestations alongside container images. These attestations are critical for security verification and cannot be deleted independently from their parent containers.
 
 **Attestation Storage Pattern:**
-- Main container: `ghcr.io/samhclark/fedora-zfs-kmods:zfs-2.3.3_kernel-6.15.4-200.fc42.x86_64`
+- Main container: `ghcr.io/samhclark/fedora-zfs-kmods:zfs-2.4.0_kernel-6.18.3-200.fc42.x86_64`
 - Container digest: `sha256:842bc9e9f77bb39ae52becb8b0231f1ef99b580b81f7a6bd051a5f6eb72ed7c8`
 - Attestation tag: `ghcr.io/samhclark/fedora-zfs-kmods:sha256-842bc9e9f77bb39ae52becb8b0231f1ef99b580b81f7a6bd051a5f6eb72ed7c8`
 

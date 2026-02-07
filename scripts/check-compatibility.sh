@@ -6,7 +6,7 @@ usage() {
 Usage: $0 <zfs_version> <kernel_major_minor>
 
 Example:
-  $0 zfs-2.3.5 6.17
+  $0 zfs-2.4.0 6.18
 USAGE
 }
 
@@ -27,6 +27,7 @@ declare -A COMPATIBILITY_MATRIX=(
   ["zfs-2.3.3"]="6.15"
   ["zfs-2.3.4"]="6.16"
   ["zfs-2.3.5"]="6.17"
+  ["zfs-2.4.0"]="6.18"
 )
 
 MAX_KERNEL=${COMPATIBILITY_MATRIX[$ZFS_VERSION]:-}

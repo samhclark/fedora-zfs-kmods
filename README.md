@@ -31,7 +31,7 @@ ghcr.io/samhclark/fedora-zfs-kmods:zfs-{zfs-version}_kernel-{kernel-version}
 
 Example:
 ```
-ghcr.io/samhclark/fedora-zfs-kmods:zfs-2.4.1_kernel-6.18.3-200.fc42.x86_64
+ghcr.io/samhclark/fedora-zfs-kmods:zfs-2.4.1_kernel-6.18.7-200.fc43.x86_64
 ```
 
 Where:

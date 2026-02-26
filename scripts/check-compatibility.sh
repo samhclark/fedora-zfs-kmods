@@ -28,6 +28,7 @@ declare -A COMPATIBILITY_MATRIX=(
   ["zfs-2.3.4"]="6.16"
   ["zfs-2.3.5"]="6.17"
   ["zfs-2.4.0"]="6.18"
+  ["zfs-2.4.1"]="6.19"
 )
 
 MAX_KERNEL=${COMPATIBILITY_MATRIX[$ZFS_VERSION]:-}

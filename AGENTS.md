@@ -123,6 +123,16 @@ This replaces ~40 lines of ZFS build-from-source with 3 lines of RPM installatio
 - Compatibility matrix must be updated for each new ZFS release
 - Build fails safe when encountering unknown versions
 
+### Getting the Correct Tarball Hash
+
+When adding a new ZFS version to `scripts/zfs-source-hashes.sh`, **always use `just zfs-tarball-hash <tag>`** to compute the hash. This command downloads the tarball from the GitHub archive URL (`https://github.com/openzfs/zfs/archive/refs/tags/<tag>.tar.gz`) which is what the Containerfile fetches at build time.
+
+```bash
+just zfs-tarball-hash zfs-2.4.2
+```
+
+Do **not** use hashes from the GitHub release page assets (e.g., `zfs-2.4.2.tar.gz` listed under release assets) — those are release tarballs with a different hash than the archive tarball.
+
 ## Container Attestations
 
 GitHub Actions automatically generates and publishes build attestations alongside container images. These attestations are critical for security verification and cannot be deleted independently from their parent containers.

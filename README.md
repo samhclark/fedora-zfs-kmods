@@ -105,23 +105,11 @@ declare -A compatibility_matrix=(
     ["zfs-2.3.5"]="6.17"
     ["zfs-2.4.0"]="6.18"
     ["zfs-2.4.1"]="6.19"
-    ["zfs-2.4.2"]="7.1"
-    ["zfs-2.4.3"]="7.1"
+    ["zfs-2.4.2"]="7.0"
+    ["zfs-2.4.3"]="7.0"
+    ["zfs-2.4.4"]="7.2"
 )
 ```
-
-### Building Against Experimental Kernels
-
-The build passes `--enable-linux-experimental` to ZFS `./configure`. This bypasses
-ZFS's built-in kernel version ceiling so we can build against a kernel that is newer
-than the maximum a given ZFS release tags as "supported" in its META file.
-
-This is needed for kernel 7.1: the compatibility patches shipped in `zfs-2.4.2`, but
-7.1 was not yet released when that version was tagged, so it is not enabled by default.
-See [openzfs/zfs#18760](https://github.com/openzfs/zfs/issues/18760). Because this flag
-removes ZFS's own guard rail, the compatibility matrix in
-`scripts/check-compatibility.sh` is the authoritative gate for which kernels we are
-willing to build against — only bump an entry once compatibility is actually confirmed.
 
 ### Adding New ZFS Versions
 

@@ -67,28 +67,9 @@ RUN set -euo pipefail \
     && tar xzf "$TARBALL_PATH" -C . --strip-components 1 \
     && rm -f "$TARBALL_PATH"
 
-# Build ZFS.
-#
-# --enable-linux-experimental bypasses ZFS's built-in kernel version ceiling
-# (the "Linux-Maximum" value in META, enforced in config/kernel.m4) so we can
-# build against kernels newer than the one the release tags as supported. The
-# kernel 7.1 compatibility patches shipped in zfs-2.4.2, but 7.1 is not enabled
-# by default yet. See https://github.com/openzfs/zfs/issues/18760
-#
-# The flag must be applied in two places. The top-level ./configure below drives
-# the `rpm-utils` userland build. But `make rpm-kmod` builds a kmod source RPM
-# and re-runs ./configure from the kmod spec, which does NOT inherit our flag --
-# without it that rebuild hits the ceiling again and fails. So we also inject the
-# flag into the kmod spec's %configure block before autogen.sh regenerates the
-# spec from this template.
-#
-# scripts/check-compatibility.sh remains the real guard rail deciding which
-# kernels we are willing to build against.
-RUN sed -i '/--with-config=kernel/a\        --enable-linux-experimental \\' rpm/generic/zfs-kmod.spec.in && \
-    export KERNEL_VERSION="$(cat /kernel-version.txt)" && \
+RUN export KERNEL_VERSION="$(cat /kernel-version.txt)" && \
     ./autogen.sh && \
     ./configure \
-        --enable-linux-experimental \
         -with-linux=/usr/src/kernels/$KERNEL_VERSION/ \
         -with-linux-obj=/usr/src/kernels/$KERNEL_VERSION/ && \
     make -j $(nproc) rpm-utils rpm-kmod
